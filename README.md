@@ -6,6 +6,8 @@ An advanced, high-fidelity **AI-Powered Digital Twin of India's Climate** develo
 
 Directly aligning with ISRO's vision of leveraging space-based observations and artificial intelligence for societal benefit, this framework provides robust monitoring, short-term forecasting, and interactive "what-if" scenario analysis to support national priorities in climate resilience, disaster risk reduction, and agricultural security under the vision of **'Atmanirbhar Bharat'**.
 
+![AI-Powered Digital Twin of India Climate Workflow](assets/digital_twin_workflow.png)
+
 ---
 
 ##  Explicit Alignment with Evaluation Parameters
