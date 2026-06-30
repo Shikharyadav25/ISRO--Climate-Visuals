@@ -37,7 +37,7 @@ class ModelLoader:
                 self.model_dir / "rainfall_lstm_model.h5",
                 compile=False
             )
-            logger.info("✓ Rainfall LSTM model loaded")
+            logger.info(" Rainfall LSTM model loaded")
 
             # ==========================
             # Temperature Models
@@ -52,7 +52,7 @@ class ModelLoader:
                 compile=False
             )
 
-            logger.info("✓ Temperature models loaded")
+            logger.info(" Temperature models loaded")
 
             # ==========================
             # Load Scalers
@@ -63,7 +63,7 @@ class ModelLoader:
             with open(self.model_dir / "temp_feature_scaler.pkl", "rb") as f:
                 self.scalers["temp_features"] = pickle.load(f)
 
-            logger.info("✓ All scalers loaded")
+            logger.info(" All scalers loaded")
 
         except Exception as e:
             logger.exception("Failed to load models.")
@@ -85,7 +85,7 @@ class ModelLoader:
                 model.to(device)
                 model.eval()
                 self.models["convlstm"] = model
-                logger.info("✓ PyTorch Rainfall ConvLSTM model loaded successfully")
+                logger.info(" PyTorch Rainfall ConvLSTM model loaded successfully")
             else:
                 self.models["convlstm"] = None
                 logger.warning("PyTorch Rainfall ConvLSTM checkpoint not found. Will use autoregressive proxy.")
@@ -98,7 +98,7 @@ class ModelLoader:
                 temp_model.to(device)
                 temp_model.eval()
                 self.models["convlstm_temp"] = temp_model
-                logger.info("✓ PyTorch Temperature ConvLSTM model loaded successfully")
+                logger.info(" PyTorch Temperature ConvLSTM model loaded successfully")
             else:
                 self.models["convlstm_temp"] = None
                 logger.warning("PyTorch Temperature ConvLSTM checkpoint not found. Will use autoregressive proxy.")

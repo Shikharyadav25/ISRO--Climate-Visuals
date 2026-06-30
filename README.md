@@ -1,6 +1,6 @@
-# 🌍 AI-Powered Digital Twin of India's Climate (ISRO Problem Statement 5)
+#  AI-Powered Digital Twin of India's Climate (ISRO Problem Statement 5)
 
-## 🎯 Executive Summary & Problem Statement Alignment
+##  Executive Summary & Problem Statement Alignment
 
 An advanced, high-fidelity **AI-Powered Digital Twin of India's Climate** developed for the ISRO Hackathon (Problem Statement 5). This dynamic virtual replica fuses heterogeneous multi-source datasets from Indian satellites (**MOSDAC INSAT**) and ground-based meteorological networks (**IMD Pune**) to simulate atmospheric and land-surface processes at high spatial and temporal resolutions.
 
@@ -8,7 +8,7 @@ Directly aligning with ISRO's vision of leveraging space-based observations and 
 
 ---
 
-## 🏆 Explicit Alignment with Evaluation Parameters
+##  Explicit Alignment with Evaluation Parameters
 
 This repository is meticulously architected to achieve excellence across all 8 official ISRO evaluation parameters:
 
@@ -23,7 +23,7 @@ This repository is meticulously architected to achieve excellence across all 8 o
 
 ---
 
-## 📁 Project Architecture & Directory Structure
+##  Project Architecture & Directory Structure
 
 ```text
 ISRO--Climate-Visuals/
@@ -66,7 +66,7 @@ ISRO--Climate-Visuals/
 
 ---
 
-## 🧠 Core AI Engine: PyTorch Spatio-Temporal ConvLSTM
+##  Core AI Engine: PyTorch Spatio-Temporal ConvLSTM
 
 Conventional LSTMs flatten spatial grids, losing critical geographical topology. Our core AI engine (`src/models/pytorch_convlstm.py`) utilizes a **Spatio-Temporal ConvLSTM** where internal matrix multiplications are replaced with 2D convolutions, operating directly on 5D tensors `[batch, time, channels, lat, lon]`.
 
@@ -87,7 +87,7 @@ model = SpatioTemporalConvLSTM(input_dim=1, hidden_dim=[64, 32], kernel_size=(3,
 
 ---
 
-## 🛰️ Multi-Source Data Assimilation (IMD + MOSDAC INSAT)
+## ️ Multi-Source Data Assimilation (IMD + MOSDAC INSAT)
 
 The framework seamlessly assimilates the required national datasets:
 
@@ -98,7 +98,7 @@ The framework seamlessly assimilates the required national datasets:
 
 ---
 
-## 🌍 Scalable Framework for National Deployment
+##  Scalable Framework for National Deployment
 
 To scale this Proof of Concept (PoC) from the **Karnataka Pilot Region** to a high-fidelity, dynamic virtual replica of the entire Indian subcontinent, the following enterprise-grade cloud architecture is designed:
 
@@ -116,7 +116,7 @@ To scale this Proof of Concept (PoC) from the **Karnataka Pilot Region** to a hi
 
 ---
 
-## 🚀 Quick Start Guide
+##  Quick Start Guide
 
 ### 1. Environment Setup
 ```bash
@@ -153,7 +153,7 @@ streamlit run app/streamlit_app.py
 
 ---
 
-## 👨‍💼 Authors & Acknowledgements
+## ‍ Authors & Acknowledgements
 
 **Developed for the ISRO Hackathon (AI-Powered Digital Twin of India's Climate)**  
 *Empowering India's climate resilience through indigenous space technology and artificial intelligence.*  

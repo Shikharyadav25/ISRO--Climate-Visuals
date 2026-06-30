@@ -3,7 +3,7 @@
 
 ---
 
-## 📋 Executive Summary
+##  Executive Summary
 
 **Project**: Development of an AI-powered digital twin for India's climate using national meteorological data from 2022-2025.
 
@@ -13,38 +13,38 @@
 - Interactive Streamlit dashboard for visualization & scenario analysis
 
 **Deliverables**:
-1. ✅ Two trained ML models (Rainfall LSTM + Temperature DNN)
-2. ✅ Interactive web dashboard with real-time predictions
-3. ✅ What-if simulation module for climate impact assessment
-4. ✅ Complete Python codebase with modular architecture
+1.  Two trained ML models (Rainfall LSTM + Temperature DNN)
+2.  Interactive web dashboard with real-time predictions
+3.  What-if simulation module for climate impact assessment
+4.  Complete Python codebase with modular architecture
 
 ---
 
-## 🎯 Objectives Met
+##  Objectives Met
 
-### 1. Design Scalable Framework ✅
+### 1. Design Scalable Framework 
 - Modular Python architecture
 - Scalable from 1 grid point to entire nation
 - All data processing reproducible
 
-### 2. Demonstrate PoC ✅
+### 2. Demonstrate PoC 
 - Rainfall LSTM: R² = 0.78, RMSE = 8.46mm
 - Temperature Models: R² = 0.77, RMSE ≈ 1.1°C
 - 4 years of national validation data
 
-### 3. Interactive Geospatial Dashboard ✅
+### 3. Interactive Geospatial Dashboard 
 - Real-time climate metrics
 - 30-day forecast visualization
 - Seasonal analysis & trends
 
-### 4. What-If Simulation Module ✅
+### 4. What-If Simulation Module 
 - Adjustable rainfall (+/-50%)
 - Temperature scenarios (+/-5°C)
 - Impact visualization
 
 ---
 
-## 📊 Technical Details
+##  Technical Details
 
 ### Data
 - **Source**: India Meteorological Department (IMD)
@@ -70,7 +70,7 @@
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Installation (< 5 minutes)
 ```bash
@@ -93,9 +93,9 @@ streamlit run streamlit_app.py
 
 ---
 
-## 📈 Key Results
+##  Key Results
 
-### Monsoon Pattern Validation ✓
+### Monsoon Pattern Validation 
 - Monsoon (Jun-Sep): 12.34 mm/day average
 - Non-monsoon: 1.23 mm/day average
 - **Ratio: 10.0x** (matches historical data)
@@ -112,7 +112,7 @@ streamlit run streamlit_app.py
 
 ---
 
-## 🌾 Real-World Applications
+##  Real-World Applications
 
 1. **Agriculture** (Crop Planning)
    - Monsoon timing & intensity prediction
@@ -136,7 +136,7 @@ streamlit run streamlit_app.py
 
 ---
 
-## 📁 Files Provided
+##  Files Provided
 
 ### Code (Fully Documented)
 - `app/streamlit_app.py` - Main interactive Streamlit dashboard
@@ -169,7 +169,7 @@ streamlit run streamlit_app.py
 
 ---
 
-## 🔄 Reproducibility
+##  Reproducibility
 
 All steps are reproducible:
 1. Raw data → Cleaned data (Notebook 02)
@@ -182,7 +182,7 @@ All steps are reproducible:
 
 ---
 
-## 💡 Innovation & Novelty
+##  Innovation & Novelty
 
 1. **First National-Scale Climate Twin**: Integrated rainfall + temperature in one system
 2. **LSTM for Sequences**: Captures temporal patterns in rainfall
@@ -192,7 +192,7 @@ All steps are reproducible:
 
 ---
 
-## ⚠️ Limitations & Future Work
+## ️ Limitations & Future Work
 
 ### Current Limitations
 1. 4 years of training data (ideal: 10+ years)
@@ -209,7 +209,7 @@ All steps are reproducible:
 
 ---
 
-## 📞 Support & Documentation
+##  Support & Documentation
 
 **To run the project:**
 1. Follow README.md (5 minutes setup)
@@ -223,11 +223,11 @@ All steps are reproducible:
 
 ---
 
-## 🏆 Conclusion
+##  Conclusion
 
 This project demonstrates a complete ML pipeline from raw climate data to interactive climate predictions, suitable for operational deployment across Indian agriculture, water resources, and disaster management sectors.
 
-**Status**: ✅ Production-Ready | ✅ Fully Documented | ✅ Reproducible | ✅ Scalable
+**Status**:  Production-Ready |  Fully Documented |  Reproducible |  Scalable
 
 ---
 
