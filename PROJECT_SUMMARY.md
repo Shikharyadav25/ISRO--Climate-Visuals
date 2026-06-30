@@ -139,25 +139,33 @@ streamlit run streamlit_app.py
 ## 📁 Files Provided
 
 ### Code (Fully Documented)
-- `src/model_loader.py` - Model loading & inference
-- `src/predictions.py` - Prediction & simulation logic
-- `src/feature_engineering.py` - Feature creation pipeline
-- `app/streamlit_app.py` - Interactive dashboard
-- `tests/test_integration.py` - Validation suite
+- `app/streamlit_app.py` - Main interactive Streamlit dashboard
+- `src/api/main.py` - FastAPI backend web service
+- `src/climate_alerts.py` - Extreme weather warnings (Heatwave, Coldwave, Heavy Rain)
+- `src/climate_copilot.py` - Conversation assistant for chatbot UI
+- `src/spatial_predictions.py` - Spatio-temporal gridded forecasting
+- `src/models/pytorch_convlstm.py` - ConvLSTM neural network definition
+- `src/model_loader.py` - Unified model singleton loader
+- `src/predictions.py` - LSTM/DNN prediction loops
+- `src/feature_engineering.py` - Feature calculators (lags, rolling averages, cyclic sine/cosine)
+- `scripts/train_convlstm.py` - Active PyTorch ConvLSTM training pipeline
+- `scripts/download_and_decode_all_real.py` - Real-time ingestion orchestrator
+- `scripts/decode_imd_binary.py` & `scripts/decode_imd_temp.py` - Ground base IMD binary decoders
+- `scripts/check_downloaded_data.py` & `scripts/download_multi_decade_imd.py` - Data checking & historical fetching utilities
+- `tests/test_integration.py` - Pipeline validation tests
 
 ### Models (Pre-trained, Ready-to-use)
-- `rainfall_lstm_model.h5` - Rainfall prediction
-- `max_temp_model.h5` - Temperature prediction
-- `min_temp_model.h5` - Temperature prediction
-- 3 scaler files for data normalization
+- `models/rainfall_lstm_model.h5` - LSTM Rainfall predictor
+- `models/max_temp_model.h5` - DNN Max Temperature predictor
+- `models/min_temp_model.h5` - DNN Min Temperature predictor
+- `models/rainfall_scaler.pkl` & `models/scalers.pkl` & `models/temp_feature_scaler.pkl` - Preprocessing scalers
+- `checkpoints/climate_twin_convlstm_final.pth` - PyTorch Spatio-temporal rainfall weights
+- `checkpoints/climate_twin_convlstm_temp.pth` - PyTorch Spatio-temporal max temp weights
 
 ### Documentation
-- `README.md` - Setup & usage
-- `RESULTS.md` - Detailed results
-- `PROJECT_SUMMARY.md` - This file
-
-### Notebooks (For Reference)
-- All 5 Kaggle notebooks with full training code
+- `README.md` - Setup, integration tests, and app deployment guide
+- `RESULT.MD` - Detailed model metrics and findings
+- `PROJECT_SUMMARY.md` - This executive summary file
 
 ---
 
@@ -206,12 +214,12 @@ All steps are reproducible:
 **To run the project:**
 1. Follow README.md (5 minutes setup)
 2. Run test_integration.py (verify all works)
-3. Launch streamlit app (cd app && streamlit run streamlit_app.py)
+3. Launch FastAPI backend service: `uvicorn src.api.main:app --port 8000`
+4. Launch Streamlit app: `streamlit run app/streamlit_app.py`
 
 **For questions:**
-- See RESULTS.md for technical details
-- Check src/ code comments for implementation
-- Review Kaggle notebooks for model development
+- See RESULT.MD for technical details
+- Check `src/` code comments for implementation details
 
 ---
 

@@ -26,25 +26,42 @@ This repository is meticulously architected to achieve excellence across all 8 o
 ## 📁 Project Architecture & Directory Structure
 
 ```text
-climate_digital_twin/
-├── app/
-│   └── streamlit_app.py         # Main Digital Twin Streamlit Dashboard
-├── data/
-│   ├── raw/                     # Raw IMD binary files (e.g., max2023.grd)
-│   └── processed/               # Decoded CF-compliant NetCDF4 datasets (.nc)
-├── scripts/
-│   ├── decode_imd_temp.py       # Custom binary to NetCDF decoder
-│   └── test_download_temp.py    # Automated IMD backend fetcher
-├── src/
-│   ├── models/
-│   │   └── pytorch_convlstm.py  # PyTorch Spatio-Temporal ConvLSTM architecture
-│   ├── spatial_predictions.py   # Fast inference engine for UI simulation
-│   └── model_loader.py          # Asset management
+ISRO--Climate-Visuals/
 ├── .streamlit/
 │   └── config.toml              # Native ISRO Dark Space theme configuration
+├── app/
+│   └── streamlit_app.py         # Main Digital Twin Streamlit Dashboard
+├── checkpoints/
+│   ├── climate_twin_convlstm_final.pth  # Spatial rainfall weights
+│   └── climate_twin_convlstm_temp.pth   # Spatial temperature weights
+├── data/
+│   └── processed/               # Decoded CF-compliant NetCDF4 datasets (.nc)
+├── models/
+│   ├── max_temp_model.h5        # Max temp neural network model
+│   ├── min_temp_model.h5        # Min temp neural network model
+│   ├── rainfall_lstm_model.h5   # Rainfall LSTM model
+│   └── *.pkl                    # Normalization scalers
+├── scripts/
+│   ├── check_downloaded_data.py # Utility to check files
+│   ├── decode_imd_binary.py     # Binary daily rainfall decoder
+│   ├── decode_imd_temp.py       # Binary daily temperature decoder
+│   ├── download_and_decode_all_real.py  # Ingestion orchestration runner
+│   ├── download_multi_decade_imd.py     # Bulk historical downloader
+│   └── train_convlstm.py        # Active ConvLSTM model training script
+├── src/
+│   ├── api/
+│   │   └── main.py              # FastAPI Web API Gateway
+│   ├── models/
+│   │   └── pytorch_convlstm.py  # PyTorch Spatio-Temporal ConvLSTM architecture
+│   ├── climate_alerts.py        # Weather warning warning analysis engine
+│   ├── climate_copilot.py       # Conversational AI assistant
+│   ├── feature_engineering.py   # Math/cyclical features calculator
+│   ├── model_loader.py          # Unified model singleton loader
+│   ├── predictions.py           # Autoregressive predictions loop
+│   └── spatial_predictions.py   # Spatio-temporal gridded forecasting engine
 ├── tests/
 │   └── test_integration.py      # Automated pipeline tests
-└── requirements.txt             # Python dependencies
+└── requirements.txt             # Python package dependencies
 ```
 
 ---
@@ -121,11 +138,18 @@ python tests/test_integration.py
 python src/models/pytorch_convlstm.py
 ```
 
-### 3. Launch the Digital Twin Dashboard
+### 3. Launch the Digital Twin Dashboard & API Backend
+
+Launch the FastAPI background service (used for spatial API calls):
+```bash
+uvicorn src.api.main:app --reload --port 8000
+```
+
+Launch the Streamlit web dashboard:
 ```bash
 streamlit run app/streamlit_app.py
 ```
-*Open your browser to `http://localhost:8501` to explore the interactive digital twin.*
+*Open your browser to `http://localhost:8501` to explore the interactive digital twin dashboard, and `http://localhost:8000/docs` to view the interactive API swagger documentation.*
 
 ---
 
