@@ -951,10 +951,18 @@ elif page == "Spatial Predictions":
                 )
                 st.plotly_chart(fig_ts, use_container_width=True)
                 
-                # Plot 2: Final Day Spatial Mapbox
-                st.markdown(f'<h3 class="section-header">Forecasted Geospatial Distribution (Day +{pred_days})</h3>', unsafe_allow_html=True)
+                # Plot 2: Final Day Spatial Mapbox (Side-by-Side Mean & Uncertainty)
+                st.markdown(f'<h3 class="section-header">Forecasted Geospatial Distribution & Uncertainty (Day +{pred_days})</h3>', unsafe_allow_html=True)
+                col_m1, col_m2 = st.columns(2)
+                
                 final_day_pred = xr.DataArray(predictions[-1], coords=[base_grid.lat, base_grid.lon], dims=["lat", "lon"], name="pred_var")
-                st.plotly_chart(plot_spatial_map(final_day_pred, f"Forecasted {variable_sel} (Day +{pred_days})", c_scale, val_name=val_lbl), use_container_width=True)
+                uncertainty_grid = (upper_b[-1] - lower_b[-1]) / 2.0
+                final_day_unc = xr.DataArray(uncertainty_grid, coords=[base_grid.lat, base_grid.lon], dims=["lat", "lon"], name="unc_var")
+                
+                with col_m1:
+                    st.plotly_chart(plot_spatial_map(final_day_pred, f"Predicted Mean {variable_sel} (Day +{pred_days})", c_scale, val_name=val_lbl), use_container_width=True)
+                with col_m2:
+                    st.plotly_chart(plot_spatial_map(final_day_unc, f"Prediction Uncertainty (±1σ Standard Deviation)", "Purples", val_name="Std Dev"), use_container_width=True)
                 
             except Exception as e:
                 st.error(f"Prediction failed: {e}")
@@ -1038,7 +1046,7 @@ elif page == "What-If Simulation":
                 st.success("**NORMAL**: Precipitation changes remain within manageable thresholds.")
                 
             st.markdown('<h3 class="section-header">Sector-Specific Climate Impact Assessment</h3>', unsafe_allow_html=True)
-            col_s1, col_s2 = st.columns(2)
+            col_s1, col_s2, col_s3 = st.columns(3)
             with col_s1:
                 st.markdown("#### Agriculture (Kharif Season)")
                 rain_mean = float(mod_rain_da.mean())
@@ -1055,7 +1063,7 @@ elif page == "What-If Simulation":
                     st.warning(f"**HEAT STRESS**: Max Temp {temp_max:.1f}°C exceeds IRRI critical threshold (35°C) for rice flowering sterility.")
                     
             with col_s2:
-                st.markdown("#### Reservoir Management (River Basins)")
+                st.markdown("#### Reservoir Management (Basins)")
                 if avg_rain_change < -10:
                     st.error("**CRITICAL**: Major basins receiving critically low inflows. Emergency water sharing protocols recommended.")
                 elif avg_rain_change < -5:
@@ -1066,6 +1074,18 @@ elif page == "What-If Simulation":
                     st.warning("**HIGH STORAGE**: Elevated inflows. Monitor dam water levels hourly.")
                 else:
                     st.success("**NORMAL**: Basin inflows within seasonal norms. Reservoir storage stable.")
+                    
+            with col_s3:
+                st.markdown("#### Public Health & Urban Adapt")
+                temp_max_all = float(mod_temp_da.max())
+                if temp_max_all > 40.0:
+                    st.error(f"**CRITICAL HEATWAVE**: Max Temperature {temp_max_all:.1f}°C. Severe risk of heatstroke. Red alert for cooling centers.")
+                elif temp_max_all > 35.0:
+                    st.warning(f"**MODERATE HEAT ALERT**: Max Temperature {temp_max_all:.1f}°C. High hydration and shade requirements.")
+                else:
+                    st.success("**SAFE TEMPERATURE**: Temperatures remain within seasonal comfortable limits.")
+                if rain_mean > 15.0 and temp_max_all > 28.0:
+                    st.warning("**VECTOR WATCH**: High humidity & warm temperatures. Elevated mosquito breeding risk. Dengue/Malaria warning active.")
 
 # PAGE 4: ANALYSIS
 elif page == "Analysis":
@@ -1076,25 +1096,23 @@ elif page == "Analysis":
         latest_lst = reg_lst.lst.isel(time=-1)
         fused_temp = predictor.assimilate_multi_source_data(latest_temp, latest_lst, variable="temperature")
         
-        tab_da1, tab_da2, tab_da3 = st.tabs([
-            "IMD Ground Max Temp (1.0°)",
-            "MOSDAC INSAT LST (1.0°)",
-            "Fused High-Fidelity Temperature"
-        ])
-        with tab_da1:
+        col_da1, col_da2, col_da3 = st.columns(3)
+        with col_da1:
+            st.markdown("##### IMD Ground Max Temp (1.0°)")
             st.plotly_chart(plot_spatial_map(latest_temp, "IMD Ground Max Temp (1.0°)", "YlOrRd", val_name="Temp (°C)"), use_container_width=True)
-        with tab_da2:
+        with col_da2:
+            st.markdown("##### MOSDAC INSAT LST (1.0°)")
             st.plotly_chart(plot_spatial_map(latest_lst, "MOSDAC INSAT LST (1.0°)", "YlOrRd", val_name="LST (°C)"), use_container_width=True)
-        with tab_da3:
+        with col_da3:
+            st.markdown("##### Fused Grid (Optimal Interpolated)")
             st.plotly_chart(plot_spatial_map(fused_temp, "Fused High-Fidelity Temperature", "YlOrRd", val_name="Fused Temp (°C)"), use_container_width=True)
     else:
-        tab_da1, tab_da2 = st.tabs([
-            "IMD Ground Max Temp (1.0°)",
-            "MOSDAC INSAT LST Status"
-        ])
-        with tab_da1:
+        col_da1, col_da2 = st.columns(2)
+        with col_da1:
+            st.markdown("##### IMD Ground Max Temp (1.0°)")
             st.plotly_chart(plot_spatial_map(latest_temp, "IMD Ground Max Temp (1.0°)", "YlOrRd", val_name="Temp (°C)"), use_container_width=True)
-        with tab_da2:
+        with col_da2:
+            st.markdown("##### MOSDAC INSAT LST Status")
             st.warning("MOSDAC INSAT LST dataset not found or locked.")
             
     st.info("Data Assimilation Insight: Inverse-variance weighting successfully smooths out satellite retrieval variance while preserving high-resolution spatial coverage.")
