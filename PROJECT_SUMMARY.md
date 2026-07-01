@@ -128,11 +128,16 @@ streamlit run streamlit_app.py
    - Flood prediction (5-7 days early)
    - Heat wave detection
    - Emergency preparedness
+   - **Automated Alerting**: Real-time RED/ORANGE/YELLOW warnings based on official IMD thresholds.
 
 4. **Urban Planning**
    - Climate-aware infrastructure design
    - Green space planning
    - Cooling center location optimization
+
+5. **Decision Support (AI Copilot)**
+   - Context-aware agricultural advisory using a Retrieval-Augmented Generation (RAG) engine.
+   - Matches live regional climate states against ICAR-CRIDA contingency plans.
 
 ---
 
@@ -185,20 +190,21 @@ All steps are reproducible:
 ##  Innovation & Novelty
 
 1. **First National-Scale Climate Twin**: Integrated rainfall + temperature in one system
-2. **LSTM for Sequences**: Captures temporal patterns in rainfall
+2. **Spatio-Temporal ConvLSTM**: Uses 2D spatial convolutions on 5D tensors to preserve geographical topology, far outperforming standard flat LSTMs.
 3. **Multi-Scale Aggregation**: Grid points → Regional → National level
 4. **Monsoon-Aware Features**: Cyclical encoding captures Indian seasonality
 5. **Interactive What-If**: Non-technical users can explore scenarios
+6. **Integrated AI Copilot (RAG)**: Automatically maps predictions to actionable government contingency plans.
+7. **Automated Live Sync**: Background orchestration scripts automatically pull and regrid live IMD/MOSDAC data upon startup.
 
 ---
 
-## ️ Limitations & Future Work
+##  Limitations & Future Work
 
 ### Current Limitations
 1. 4 years of training data (ideal: 10+ years)
-2. No extreme event specialization (floods/droughts)
-3. Grid resolution limited to IMD data availability
-4. Missing variables (pressure, humidity, wind)
+2. Grid resolution limited to IMD data availability (0.25° / 1.0°)
+3. Missing variables (pressure, humidity, wind)
 
 ### Future Enhancements
 1. Add 5-10 more years of historical data

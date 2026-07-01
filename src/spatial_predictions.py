@@ -1,222 +1,30 @@
 import numpy as np
 import xarray as xr
+import json
+import os
+from matplotlib.path import Path
 
-# Pilot Regions Bounding Boxes: (lat_min, lat_max, lon_min, lon_max)
-PILOT_REGIONS = {
-    "All India": (6.5, 37.5, 66.5, 97.5),
-    "Andaman and Nicobar Islands": (6.0, 14.0, 92.0, 94.5),
-    "Andhra Pradesh": (12.5, 19.5, 76.5, 84.5),
-    "Arunachal Pradesh": (26.0, 29.5, 91.5, 97.5),
-    "Assam": (24.0, 28.0, 89.5, 96.5),
-    "Bihar": (24.0, 27.5, 83.0, 88.5),
-    "Chandigarh": (30.6, 30.9, 76.6, 76.9),
-    "Chhattisgarh": (17.5, 24.5, 80.0, 84.5),
-    "Dadra and Nagar Haveli and Daman and Diu": (19.8, 20.6, 72.6, 73.4),
-    "Delhi": (28.4, 28.9, 76.8, 77.4),
-    "Goa": (14.8, 15.8, 73.6, 74.4),
-    "Gujarat": (20.0, 24.8, 68.0, 74.5),
-    "Haryana": (27.5, 31.2, 74.4, 77.6),
-    "Himachal Pradesh": (30.3, 33.3, 75.5, 79.1),
-    "Jammu and Kashmir": (32.0, 37.0, 73.5, 80.5),
-    "Jharkhand": (21.8, 25.3, 83.3, 88.0),
-    "Karnataka": (11.5, 18.5, 74.0, 78.5),
-    "Kerala": (8.0, 12.8, 74.8, 77.5),
-    "Ladakh": (32.0, 36.0, 75.0, 80.0),
-    "Lakshadweep": (8.0, 12.5, 71.5, 74.5),
-    "Madhya Pradesh": (21.0, 26.9, 74.0, 82.8),
-    "Maharashtra": (15.5, 22.0, 72.5, 81.0),
-    "Manipur": (23.8, 25.7, 92.9, 94.8),
-    "Meghalaya": (25.0, 26.2, 89.8, 92.8),
-    "Mizoram": (21.9, 24.5, 92.2, 93.5),
-    "Nagaland": (25.1, 27.1, 93.3, 95.3),
-    "Odisha": (17.8, 22.6, 81.3, 87.5),
-    "Puducherry": (11.7, 12.1, 79.7, 80.0),
-    "Punjab": (29.5, 32.5, 73.8, 77.0),
-    "Rajasthan": (23.0, 30.5, 69.5, 78.5),
-    "Sikkim": (27.0, 28.2, 88.0, 89.0),
-    "Tamil Nadu": (8.0, 14.0, 76.0, 80.5),
-    "Telangana": (15.8, 19.9, 77.2, 81.8),
-    "Tripura": (22.9, 24.5, 91.1, 92.4),
-    "Uttar Pradesh": (23.8, 30.5, 77.0, 84.8),
-    "Uttarakhand": (28.7, 31.5, 77.5, 81.1),
-    "West Bengal": (21.5, 27.3, 85.8, 89.9),
-}
-
-# Simplified polygon vertices (lon, lat) for all 36 states/UTs
-STATE_POLYGONS = {
-    "Andhra Pradesh": [
-        (79.5,13.4),(79.9,14.0),(80.1,14.7),(80.3,15.5),(80.0,16.4),(80.3,17.0),
-        (81.7,17.9),(82.2,17.7),(82.9,17.7),(83.4,18.0),(84.0,18.2),(84.5,18.3),
-        (84.7,17.8),(84.0,17.0),(83.0,16.0),(82.0,15.0),(81.0,14.0),(80.5,13.5),
-        (80.0,12.8),(79.5,13.0)
-    ],
-    "Arunachal Pradesh": [
-        (91.5,27.5),(92.5,27.8),(93.5,27.8),(94.5,28.0),(95.5,28.2),(96.5,28.3),
-        (97.3,28.5),(97.5,28.0),(97.0,27.5),(96.0,27.0),(95.0,26.8),(94.0,27.0),
-        (93.0,26.8),(92.0,27.0),(91.5,27.3)
-    ],
-    "Assam": [
-        (89.7,26.4),(90.5,26.5),(91.5,26.7),(92.5,26.5),(93.5,26.2),(94.5,26.5),
-        (95.5,27.0),(95.8,27.4),(95.0,27.5),(94.0,27.4),(93.0,27.2),(92.0,27.5),
-        (91.5,27.3),(91.0,26.8),(90.0,26.7),(89.7,26.4)
-    ],
-    "Bihar": [
-        (83.3,27.3),(84.2,27.5),(84.6,27.0),(85.5,27.3),(86.5,27.0),(87.8,27.3),
-        (88.3,26.3),(87.7,25.5),(87.8,25.0),(86.5,25.3),(86.0,25.0),(85.2,25.0),
-        (83.9,24.5),(83.3,24.5),(83.7,25.5),(83.2,25.6)
-    ],
-    "Chhattisgarh": [
-        (80.3,24.0),(81.5,24.2),(82.5,24.0),(83.5,23.5),(84.0,23.0),(83.8,22.0),
-        (83.0,21.5),(82.0,21.5),(81.0,22.0),(80.5,22.5),(80.0,23.0),(79.5,23.5),
-        (80.0,24.0)
-    ],
-    "Delhi": [
-        (76.8,28.4),(77.4,28.4),(77.4,28.9),(76.8,28.9)
-    ],
-    "Goa": [
-        (73.6,14.8),(74.4,14.8),(74.4,15.8),(73.6,15.8)
-    ],
-    "Gujarat": [
-        (68.2,22.2),(69.0,23.0),(69.8,24.0),(70.5,24.5),(71.5,24.7),(72.5,24.5),
-        (73.5,24.0),(74.5,23.3),(74.5,22.0),(73.8,21.0),(73.0,20.3),(72.5,20.5),
-        (72.0,21.0),(71.5,21.5),(71.0,22.0),(70.0,22.5),(69.0,22.5),(68.5,22.5)
-    ],
-    "Haryana": [
-        (74.4,28.0),(75.0,29.0),(75.5,30.0),(76.5,30.5),(77.5,30.5),(77.5,29.5),
-        (77.0,28.5),(76.5,28.0),(76.0,27.5),(75.0,27.5),(74.5,28.0)
-    ],
-    "Himachal Pradesh": [
-        (75.5,30.5),(76.5,31.0),(77.5,31.5),(78.5,32.0),(79.0,32.5),(79.0,31.5),
-        (78.5,31.0),(78.0,30.5),(77.0,30.0),(76.0,30.5)
-    ],
-    "Jammu and Kashmir": [
-        (73.8,34.5),(74.5,34.8),(75.5,35.0),(76.5,35.2),(77.5,35.5),(78.5,35.5),
-        (79.5,34.8),(80.0,33.8),(79.0,33.0),(78.0,33.0),(77.0,33.5),(76.0,33.5),
-        (75.0,33.0),(74.0,33.2),(73.5,34.0)
-    ],
-    "Jharkhand": [
-        (83.5,24.5),(84.5,24.5),(85.5,24.2),(86.5,24.5),(87.5,24.5),(87.8,24.0),
-        (87.0,23.0),(86.0,22.5),(85.0,22.2),(84.0,22.5),(83.5,23.0),(83.0,23.5)
-    ],
-    "Karnataka": [
-        (74.0,15.0),(74.0,15.6),(74.4,15.6),(74.8,17.5),(75.5,17.8),(76.5,18.4),
-        (77.5,18.0),(77.6,17.0),(77.1,16.0),(77.8,15.0),(77.3,14.0),(78.4,13.5),
-        (78.3,12.5),(77.8,12.0),(77.0,11.6),(76.5,12.0),(75.0,12.5),(74.5,13.5)
-    ],
-    "Kerala": [
-        (74.8,12.8),(75.5,12.8),(76.0,12.0),(76.5,11.0),(77.0,10.0),(77.3,9.0),
-        (77.1,8.3),(76.5,8.5),(76.0,9.5),(75.5,10.5),(75.0,11.5),(74.8,12.0)
-    ],
-    "Madhya Pradesh": [
-        (74.0,23.5),(75.0,24.5),(76.0,24.5),(77.0,25.5),(78.0,26.0),(79.0,26.5),
-        (80.0,26.5),(81.0,26.0),(82.0,25.5),(82.5,24.5),(82.0,23.5),(81.0,23.0),
-        (80.0,22.5),(79.0,22.5),(78.0,22.0),(77.0,22.5),(76.0,23.0),(75.0,23.0)
-    ],
-    "Maharashtra": [
-        (72.6,20.0),(73.0,20.3),(74.5,21.8),(76.0,21.6),(78.0,21.5),(79.0,21.8),
-        (80.5,21.8),(80.9,19.5),(80.0,18.8),(78.0,18.0),(77.8,17.5),(76.5,17.8),
-        (76.0,17.0),(75.8,16.0),(74.2,15.6),(73.6,16.0),(72.8,17.5),(72.8,19.0)
-    ],
-    "Manipur": [
-        (92.9,24.0),(93.5,24.2),(94.0,24.5),(94.8,25.0),(94.5,25.7),(93.8,25.7),
-        (93.0,25.5),(92.5,25.0),(92.9,24.5)
-    ],
-    "Meghalaya": [
-        (89.8,25.5),(90.5,25.5),(91.5,25.7),(92.5,25.5),(92.8,25.0),(92.0,25.0),
-        (91.0,25.2),(90.0,25.0),(89.8,25.3)
-    ],
-    "Mizoram": [
-        (92.3,23.0),(93.0,23.0),(93.5,23.5),(93.5,24.0),(93.0,24.5),(92.5,24.5),
-        (92.2,24.0),(92.2,23.5)
-    ],
-    "Nagaland": [
-        (93.3,25.5),(94.0,25.8),(95.0,26.5),(95.3,26.8),(95.0,27.0),(94.5,26.8),
-        (94.0,26.5),(93.5,26.0),(93.3,25.7)
-    ],
-    "Odisha": [
-        (81.5,19.0),(82.5,19.5),(83.5,19.5),(84.5,19.8),(85.5,20.0),(86.5,20.5),
-        (87.5,21.0),(87.5,22.0),(86.5,22.5),(85.5,22.0),(84.5,21.5),(83.5,21.0),
-        (82.5,20.5),(81.5,20.0),(81.0,19.5)
-    ],
-    "Punjab": [
-        (73.9,30.0),(74.5,30.5),(75.5,31.0),(76.0,31.5),(76.5,32.5),(77.0,32.3),
-        (77.0,31.0),(76.5,30.0),(76.0,29.5),(75.0,29.5),(74.0,30.0)
-    ],
-    "Rajasthan": [
-        (70.0,26.5),(69.6,28.0),(71.5,29.0),(72.5,30.0),(74.0,30.5),(75.3,30.3),
-        (76.2,28.5),(77.0,28.0),(77.8,27.2),(77.5,26.8),(76.8,25.0),(76.5,24.0),
-        (75.8,24.3),(74.5,23.3),(73.8,24.5),(72.5,24.5),(71.0,25.0)
-    ],
-    "Sikkim": [
-        (88.0,27.1),(88.5,27.5),(89.0,28.2),(88.5,28.1),(88.0,27.8)
-    ],
-    "Tamil Nadu": [
-        (76.0,11.5),(77.0,12.8),(78.5,13.0),(80.2,13.5),(80.2,12.5),(79.8,11.0),
-        (79.9,10.3),(79.3,9.2),(78.2,8.8),(77.5,8.1),(77.2,8.5),(77.3,9.5),(76.6,10.5)
-    ],
-    "Telangana": [
-        (77.5,16.0),(78.0,17.0),(79.0,17.5),(80.0,18.0),(81.0,18.0),(81.5,18.5),
-        (82.0,18.0),(81.5,17.0),(81.0,16.0),(80.0,15.5),(79.0,15.5),(78.0,16.0)
-    ],
-    "Tripura": [
-        (91.2,23.0),(91.8,23.5),(92.3,24.0),(92.4,24.5),(92.0,24.5),(91.5,24.0),
-        (91.1,23.5)
-    ],
-    "Uttar Pradesh": [
-        (77.2,29.0),(78.0,30.0),(79.0,30.2),(80.2,31.0),(81.0,30.2),(82.2,28.8),
-        (83.0,28.5),(84.3,27.3),(84.7,26.0),(84.0,25.0),(83.2,25.0),(83.2,24.0),
-        (82.5,24.3),(81.5,25.0),(80.2,25.2),(78.5,25.0),(78.2,24.3),(77.8,25.0),
-        (77.3,27.2),(77.5,28.2)
-    ],
-    "Uttarakhand": [
-        (77.5,30.0),(78.0,30.5),(79.0,31.0),(80.0,31.5),(81.0,31.0),(80.5,30.0),
-        (79.5,29.5),(78.5,29.5),(77.5,30.0)
-    ],
-    "West Bengal": [
-        (85.8,21.5),(86.5,22.0),(87.5,22.5),(88.5,22.8),(89.0,23.5),(88.8,24.0),
-        (88.5,25.0),(89.0,26.0),(88.5,27.2),(88.0,27.0),(87.5,26.0),(87.0,25.0),
-        (86.5,24.0),(86.0,23.0),(85.8,22.0)
-    ],
-    "Andaman and Nicobar Islands": [
-        (92.2,13.5),(92.8,13.5),(93.0,12.5),(93.0,11.5),(92.8,10.5),(92.5,10.5),
-        (92.3,11.5),(92.1,12.5)
-    ],
-    "Lakshadweep": [
-        (71.8,11.5),(72.2,11.5),(72.4,10.5),(72.2,10.5),(72.0,11.0)
-    ],
-    "Chandigarh": [
-        (76.65,30.62),(76.90,30.62),(76.90,30.85),(76.65,30.85)
-    ],
-    "Puducherry": [
-        (79.7,11.8),(80.0,11.8),(80.0,12.1),(79.7,12.1)
-    ],
-    "Dadra and Nagar Haveli and Daman and Diu": [
-        (72.8,20.0),(73.2,20.0),(73.3,20.4),(72.9,20.5)
-    ],
-    "Ladakh": [
-        (75.5,32.5),(77.0,33.5),(78.5,34.0),(79.5,34.5),(80.0,33.5),(79.0,32.5),
-        (78.0,32.0),(77.0,32.5),(76.0,32.5)
-    ],
-}
-
-
-def is_point_in_polygon(x, y, poly):
-    """Ray casting algorithm to determine if point (x, y) is inside polygon"""
-    n = len(poly)
-    inside = False
-    p1x, p1y = poly[0]
-    for i in range(n + 1):
-        p2x, p2y = poly[i % n]
-        if y > min(p1y, p2y):
-            if y <= max(p1y, p2y):
-                if x <= max(p1x, p2x):
-                    if p1y != p2y:
-                        xints = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                    if p1x == p2x or x <= xints:
-                        inside = not inside
-        p1x, p1y = p2x, p2y
-    return inside
-
+# Dynamically load the absolute geographic polygons and bounding boxes
+_data_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'processed', 'india_spatial_data.json')
+try:
+    with open(_data_path, 'r', encoding='utf-8') as f:
+        _geo_data = json.load(f)
+    PILOT_REGIONS = _geo_data['pilot_regions']
+    STATE_POLYGONS = _geo_data['state_polygons']
+    
+    # Precompute Matplotlib Paths for ultra-fast point-in-polygon masking
+    STATE_PATHS = {}
+    for state, polys in STATE_POLYGONS.items():
+        paths = []
+        for poly in polys:
+            if len(poly) > 2:
+                paths.append(Path(poly))
+        STATE_PATHS[state] = paths
+except Exception as e:
+    print(f"Warning: Failed to load dynamic geospatial data: {e}")
+    PILOT_REGIONS = {"All India": (6.5, 37.5, 66.5, 97.5)}
+    STATE_POLYGONS = {}
+    STATE_PATHS = {}
 
 class SpatialClimatePredictor:
     def __init__(self, model_loader=None):
@@ -421,18 +229,62 @@ class SpatialClimatePredictor:
         return np.array(predictions), np.array(lower_bounds), np.array(upper_bounds)
 
     def simulate_what_if_spatial(self, base_rain_grid, base_temp_grid, rain_modifier, temp_modifier):
-        """Simulate climate change with nonlinear Clausius-Clapeyron thermodynamic interactions."""
+        """
+        Simulate climate change using localized Clausius-Clapeyron thermodynamic interactions.
+        Integrates non-linear moisture holding capacity (Tetens formula) and convective scaling.
+        """
+        # Base modifiers
         mod_rain = base_rain_grid.values * (1 + rain_modifier / 100.0)
         mod_temp = base_temp_grid.values + temp_modifier
+        
+        # Rigorous Clausius-Clapeyron scaling
+        # We apply an intensification factor based on Saturation Vapor Pressure (e_s)
         if temp_modifier > 0.0:
-            scaling_factor = 1.0 + (temp_modifier * 0.07)
-            mod_rain = np.where(mod_rain > 5.0, mod_rain * scaling_factor, mod_rain)
+            # Tetens formula for e_s (hPa)
+            e_s_base = 6.11 * np.exp((17.27 * base_temp_grid.values) / (base_temp_grid.values + 237.3))
+            e_s_mod = 6.11 * np.exp((17.27 * mod_temp) / (mod_temp + 237.3))
+            
+            # Thermodynamic scaling factor (e_s ratio)
+            thermo_scaling = e_s_mod / e_s_base
+            
+            # Apply non-linear intensification strictly to convective precipitation (heavy rain)
+            mod_rain = np.where(mod_rain > 5.0, mod_rain * thermo_scaling, mod_rain)
             mod_rain = np.maximum(0, mod_rain)
+            
         elif temp_modifier < 0.0:
+            # Suppressed convection dynamics
             drying_factor = 1.0 + (temp_modifier * 0.04)
             mod_rain = np.where(mod_rain > 2.0, mod_rain * drying_factor, mod_rain)
             mod_rain = np.maximum(0, mod_rain)
+            
         return {'modified_rainfall': mod_rain, 'modified_max_temp': mod_temp}
+
+    def simulate_soil_moisture(self, rain_grid, temp_grid):
+        """
+        Physics-based simulation of NICES Soil Moisture Index (0-100%).
+        Uses antecedent precipitation index proxy and evapotranspiration decay.
+        """
+        # Baseline moisture from rainfall (logarithmic saturation)
+        rain_mm = np.nan_to_num(rain_grid.values, nan=0.0)
+        moisture = 100.0 * (1.0 - np.exp(-rain_mm / 15.0))
+        
+        # Evaporative stress from temperature
+        temp_c = np.nan_to_num(temp_grid.values, nan=25.0)
+        evap_stress = np.maximum(0, (temp_c - 20.0) * 1.5)
+        
+        # Combine and bound
+        moisture = moisture - evap_stress
+        moisture = np.clip(moisture + 15.0, 0, 100) # Baseline 15% minimum moisture
+        
+        # Re-apply spatial mask
+        moisture = np.where(np.isnan(rain_grid.values), np.nan, moisture)
+        
+        return xr.DataArray(
+            moisture,
+            coords=[rain_grid.lat, rain_grid.lon],
+            dims=["lat", "lon"],
+            name="soil_moisture"
+        )
 
     def assimilate_multi_source_data(self, imd_ground_grid, insat_sat_grid, variable="temperature"):
         """

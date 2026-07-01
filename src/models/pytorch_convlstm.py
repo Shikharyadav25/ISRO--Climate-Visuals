@@ -52,21 +52,38 @@ class ConvLSTMCell(nn.Module):
                 torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device))
 
 
+class SpatialAttention(nn.Module):
+    """
+    Spatial Attention Module to focus on localized extreme weather phenomena.
+    Mimics the attention mechanisms used in modern foundation models (GraphCast, Pangu-Weather).
+    """
+    def __init__(self, in_channels):
+        super(SpatialAttention, self).__init__()
+        self.conv = nn.Conv2d(in_channels, 1, kernel_size=3, padding=1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        attn_weights = self.sigmoid(self.conv(x))
+        return x * attn_weights
+
+
 class SpatioTemporalConvLSTM(nn.Module):
     """
-    Multi-layer ConvLSTM Network for high-resolution gridded weather prediction.
+    Attention-Augmented Multi-layer ConvLSTM Network for high-resolution gridded weather prediction.
     Architecture designed for IMD Gridded Rainfall (0.25°) and Max Temp (1.0°).
     """
     def __init__(self, input_dim, hidden_dim, kernel_size, num_layers):
         super(SpatioTemporalConvLSTM, self).__init__()
         self.num_layers = num_layers
         self.cell_list = nn.ModuleList()
+        self.attention_list = nn.ModuleList()
 
         for i in range(self.num_layers):
             cur_input_dim = input_dim if i == 0 else hidden_dim[i - 1]
             self.cell_list.append(ConvLSTMCell(input_dim=cur_input_dim,
                                                hidden_dim=hidden_dim[i],
                                                kernel_size=kernel_size))
+            self.attention_list.append(SpatialAttention(in_channels=hidden_dim[i]))
 
         # Final output projection layer to map back to target weather variable channels (e.g., 1 for rainfall)
         self.out_conv = nn.Conv2d(in_channels=hidden_dim[-1], out_channels=1, kernel_size=1)
@@ -90,6 +107,10 @@ class SpatioTemporalConvLSTM(nn.Module):
             output_inner = []
             for t in range(seq_len):
                 h, c = self.cell_list[layer_idx](input_tensor=cur_layer_input[:, t, :, :, :], cur_state=[h, c])
+                
+                # Apply Spatial Attention to focus on critical features
+                h = self.attention_list[layer_idx](h)
+                
                 output_inner.append(h)
 
             layer_output = torch.stack(output_inner, dim=1)

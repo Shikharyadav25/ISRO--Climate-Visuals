@@ -1,3 +1,4 @@
+# Force reload of NetCDF data
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -8,6 +9,23 @@ import sys
 import os
 import xarray as xr
 import importlib
+
+# -----------------------------------------------------------------------------
+# AUTOMATED DATA INGESTION HOOK
+# -----------------------------------------------------------------------------
+import subprocess
+import streamlit as st
+
+@st.cache_resource
+def trigger_imd_sync():
+    try:
+        subprocess.run([sys.executable, 'scripts/sync_live_imd.py'], check=True, capture_output=True)
+    except Exception as e:
+        print(e)
+    return True
+
+with st.spinner('Synchronizing live climate data with IMD servers...'):
+    trigger_imd_sync()
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -39,65 +57,18 @@ st.markdown("""
         /* ── FONT: BRICOLAGE GROTESQUE — SINGLE FONT EVERYWHERE ── */
         @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&display=swap');
 
-        /* Nuclear override — covers every element Streamlit may inject */
-        *,
-        *::before,
-        *::after,
-        html, body,
-        h1, h2, h3, h4, h5, h6,
-        p, span, div, section, article, aside, nav, main, header, footer,
-        a, label, input, textarea, select, button, option,
-        table, th, td, tr, thead, tbody,
-        li, ul, ol,
-        code, pre, kbd, samp,
-        [class*="st-emotion-cache"],
-        [class*="css-"],
-        [class*="stApp"],
-        [class*="stSidebar"],
-        [class*="stMain"],
-        [class*="stMarkdown"],
-        [class*="stText"],
-        [class*="stMetric"],
-        [class*="stButton"],
-        [class*="stSelectbox"],
-        [class*="stSlider"],
-        [class*="stTabs"],
-        [class*="stTab"],
-        [class*="stAlert"],
-        [class*="stContainer"],
-        [data-testid],
-        [data-baseweb],
-        [role="tab"],
-        [role="radiogroup"] label,
-        .stApp *, .element-container *,
-        div[data-testid="stVerticalBlock"] *,
-        div[data-testid="stHorizontalBlock"] * {
+        /* Safe Nuclear override — covers everything EXCEPT Streamlit icons */
+        *:not(.material-symbols-rounded):not(.material-symbols-outlined):not([data-testid="stIconMaterial"]):not([class*="icon"]):not([data-testid="collapsedControl"] span):not([data-testid="stSidebarCollapse"] span) {
             font-family: 'Bricolage Grotesque', sans-serif !important;
         }
 
-        /* ── HIDE STREAMLIT CHROME ──────────────── */
-        #MainMenu, footer, header, .stAppDeployButton,
-        [data-testid="stHeader"], [data-testid="stToolbar"] { visibility: hidden; display: none !important; }
-        /* Keep sidebar toggle visible but style it dark */
-        [data-testid="collapsedControl"] {
-            background: #0D1526 !important;
-            border-right: 1px solid rgba(255,255,255,0.06) !important;
-        }
-        [data-testid="collapsedControl"] button,
-        button[data-testid="stSidebarCollapse"],
-        [data-testid="stSidebar"] > div:first-child > div:first-child button {
-            color: #FF6B00 !important;
-            background: transparent !important;
-            border: none !important;
-            opacity: 0.7 !important;
-            transition: opacity 0.2s ease !important;
-        }
-        [data-testid="collapsedControl"] button:hover,
-        button[data-testid="stSidebarCollapse"]:hover {
-            opacity: 1 !important;
-        }
+        /* ── STREAMLIT CHROME ──────────────── */
+        /* Temporarily disabled to check if this hides the sidebar toggle */
+        /* #MainMenu, footer, .stAppDeployButton, [data-testid="stToolbar"] { visibility: hidden; display: none !important; } */
+        [data-testid="stHeader"] { background: transparent !important; }
+        /* Let Streamlit natively handle the sidebar toggle to prevent conflicts */
         h1 a, h2 a, h3 a, h4 a, h5 a, h6 a, a.header-anchor,
-        .element-container a.header-anchor, [data-testid="stHeaderActionElements"] {
+        .element-container a.header-anchor {
             display: none !important; visibility: hidden !important;
         }
         div[data-testid="stElementContainer"]:has(style) {
@@ -110,9 +81,18 @@ st.markdown("""
         [data-testid="stMain"], .main {
             background: #0A0F1E !important;
             color: #CBD5E1 !important;
-            font-family: 'Bricolage Grotesque', sans-serif !important;
+            font-family: 'Bricolage Grotesque', sans-serif;
         }
         * { box-sizing: border-box; }
+        
+        /* ── PROTECT MATERIAL ICONS ──────────────── */
+        .material-symbols-rounded, .material-symbols-outlined, 
+        [data-testid="stIconMaterial"], [class*="icon"],
+        [data-testid="collapsedControl"] span,
+        [data-testid="stSidebarCollapse"] span,
+        .st-emotion-cache-16idece {
+            font-family: "Material Symbols Rounded", "Material Icons", sans-serif !important;
+        }
 
         /* ── STRIP STREAMLIT EMOTION CACHE BORDERS ── */
         /* Removes the white/grey auto-border Streamlit injects on emotion wrappers */
@@ -228,6 +208,39 @@ st.markdown("""
             font-size: 0.65rem !important; font-weight: 600 !important;
             color: #64748B !important; letter-spacing: 1px !important;
             text-transform: uppercase !important;
+        }
+
+        /* ── RESPONSIVE DESIGN (MOBILE & TABLET) ── */
+        @media (max-width: 768px) {
+            [data-testid="block-container"] {
+                width: 100% !important;
+                min-width: 100% !important;
+                max-width: 100% !important;
+                padding: 1rem 0rem 0rem 0rem !important;
+                margin: 0 !important;
+            }
+            .main-header {
+                font-size: 1.4rem !important;
+                padding-left: 0.5rem;
+                padding-right: 0.5rem;
+            }
+            [data-testid="stMain"] div[data-testid="stLayoutWrapper"] {
+                padding: 0.2rem !important;
+                border-left: none !important;
+                border-right: none !important;
+                box-shadow: none !important;
+                border-radius: 0px !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+            }
+            div[data-baseweb="tab-panel"] {
+                padding-left: 0rem !important;
+                padding-right: 0rem !important;
+                padding-bottom: 0rem !important;
+            }
+            div[data-testid="stMetricValue"] {
+                font-size: 1.25rem !important;
+            }
         }
 
         /* ── TABS ───────────────────────────────── */
@@ -348,7 +361,7 @@ st.markdown("""
 
 
 @st.cache_resource
-def load_spatial_predictor_v3():
+def load_spatial_predictor_v4():
     model_loader = ModelLoader()
     return SpatialClimatePredictor(model_loader)
 
@@ -360,153 +373,103 @@ def load_alert_engine_v3():
 def load_copilot_engine():
     return ClimateCopilotEngine()
 
-def is_point_in_polygon(x, y, poly):
-    n = len(poly)
-    inside = False
-    p1x, p1y = poly[0]
-    for i in range(n + 1):
-        p2x, p2y = poly[i % n]
-        if y > min(p1y, p2y):
-            if y <= max(p1y, p2y):
-                if x <= max(p1x, p2x):
-                    if p1y != p2y:
-                        xints = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                    if p1x == p2x or x <= xints:
-                        inside = not inside
-        p1x, p1y = p2x, p2y
-    return inside
-
 def mask_region_boundary_local(data_array, region_name):
-    if data_array is None or region_name not in STATE_POLYGONS:
+    from src.spatial_predictions import STATE_PATHS
+    if data_array is None or region_name not in STATE_PATHS:
         return data_array
         
-    poly = STATE_POLYGONS[region_name]
+    paths = STATE_PATHS[region_name]
     lats = data_array.lat.values
     lons = data_array.lon.values
     
-    mask = np.zeros((len(lats), len(lons)), dtype=bool)
-    for i, lat in enumerate(lats):
-        for j, lon in enumerate(lons):
-            if is_point_in_polygon(lon, lat, poly):
-                mask[i, j] = True
-                
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+    points = np.column_stack((lon_grid.ravel(), lat_grid.ravel()))
+    
+    # Vectorized check across all sub-polygons for the state
+    mask_1d = np.zeros(len(points), dtype=bool)
+    for p in paths:
+        mask_1d |= p.contains_points(points)
+        
+    mask = mask_1d.reshape((len(lats), len(lons)))
     mask_da = xr.DataArray(mask, coords=[('lat', lats), ('lon', lons)])
     
     if isinstance(data_array, xr.Dataset):
         masked_ds = data_array.copy(deep=True)
         for var in masked_ds.data_vars:
-            masked_ds[var] = xr.where(mask_da, masked_ds[var], np.nan)
+            masked_ds[var] = masked_ds[var].where(mask_da, np.nan)
         return masked_ds
     else:
-        return xr.where(mask_da, data_array, np.nan)
-def extend_dataset_to_today(ds, var_name):
-    if ds is None:
-        return None
-    try:
-        latest_time = pd.to_datetime(ds.time.values[-1])
-        today = pd.Timestamp.now().normalize()
-        if latest_time >= today:
-            return ds
-            
-        new_dates = pd.date_range(start=latest_time + pd.Timedelta(days=1), end=today, freq='D')
-        
-        # Build climatological average per (month, day) from historical data
-        times = pd.to_datetime(ds.time.values)
-        data_arr = ds[var_name].values  # shape: (T, lat, lon)
-        clim = {}
-        for t_idx, t in enumerate(times):
-            key = (t.month, t.day)
-            if key not in clim:
-                clim[key] = []
-            clim[key].append(data_arr[t_idx])
-        clim_mean = {k: np.mean(v, axis=0).astype(np.float32) for k, v in clim.items()}
-        
-        shape = (len(new_dates), len(ds.lat), len(ds.lon))
-        new_data = np.zeros(shape, dtype=np.float32)
-        np.random.seed(42)
-        for i, nd in enumerate(new_dates):
-            key = (nd.month, nd.day)
-            # Find best match: exact, then nearest in day-of-year
-            if key in clim_mean:
-                base = clim_mean[key]
-            else:
-                # Fall back to closest day-of-year available
-                target_doy = nd.timetuple().tm_yday
-                best_key = min(clim_mean.keys(), key=lambda k: abs(
-                    pd.Timestamp(2023, k[0], k[1]).timetuple().tm_yday - target_doy
-                ))
-                base = clim_mean[best_key]
-            new_data[i] = base * (1.0 + np.random.uniform(-0.04, 0.04, base.shape))
-            
-        coords = {'time': new_dates, 'lat': ds.lat, 'lon': ds.lon}
-        ds_new = xr.Dataset(
-            data_vars={var_name: (['time', 'lat', 'lon'], new_data, ds[var_name].attrs)},
-            coords=coords, attrs=ds.attrs
-        )
-        extended = xr.concat([ds, ds_new], dim='time')
-        return extended
-    except Exception:
-        return ds
+        return data_array.where(mask_da, np.nan)
+
 
 @st.cache_data(ttl=3600)
 def fetch_nasa_power_data(lat, lon):
     try:
         import urllib.request
         import json
-        req_url = f"https://power.larc.nasa.gov/api/temporal/daily/point?parameters=RH2M,WS10M,PS&community=RE&longitude={lon:.2f}&latitude={lat:.2f}&start=20230101&end=20230107&format=JSON"
+        from datetime import datetime, timedelta
+        
+        today = datetime.today()
+        end_date = today.strftime('%Y%m%d')
+        start_date = (today - timedelta(days=7)).strftime('%Y%m%d')
+        
+        req_url = f"https://power.larc.nasa.gov/api/temporal/daily/point?parameters=RH2M,WS10M,PS&community=RE&longitude={lon:.2f}&latitude={lat:.2f}&start={start_date}&end={end_date}&format=JSON"
         req = urllib.request.Request(req_url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=4) as response:
             data = json.loads(response.read().decode())
-            rh = list(data['properties']['parameter']['RH2M'].values())[-1]
-            ws = list(data['properties']['parameter']['WS10M'].values())[-1]
-            ps = list(data['properties']['parameter']['PS'].values())[-1]
+            def get_latest_valid(vals):
+                for v in reversed(list(vals)):
+                    if v != -999.0: return v
+                return "N/A"
+            rh = get_latest_valid(data['properties']['parameter']['RH2M'].values())
+            ws = get_latest_valid(data['properties']['parameter']['WS10M'].values())
+            ps = get_latest_valid(data['properties']['parameter']['PS'].values())
             return {"rh": rh, "ws": ws, "ps": ps, "status": "LIVE"}
     except Exception as e:
-        return {"rh": 68.4, "ws": 4.2, "ps": 100.8, "status": "CACHED", "error": str(e)}
+        return {"rh": "N/A", "ws": "N/A", "ps": "N/A", "status": "ERROR", "error": str(e)}
 
 @st.cache_data(ttl=3600)
 def fetch_open_meteo_hydrological_data(lat, lon):
     try:
         import urllib.request
         import json
-        om_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat:.2f}&longitude={lon:.2f}&daily=et0_fao_evapotranspiration,soil_moisture_0_to_7cm&timezone=auto"
+        om_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat:.2f}&longitude={lon:.2f}&daily=et0_fao_evapotranspiration&hourly=soil_moisture_0_to_7cm&timezone=auto"
         req = urllib.request.Request(om_url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=4) as response:
             data = json.loads(response.read().decode())
             et_val = data['daily']['et0_fao_evapotranspiration'][-1]
-            sm_val = data['daily']['soil_moisture_0_to_7cm'][-1]
+            sm_val = data['hourly']['soil_moisture_0_to_7cm'][-1]
             return {"et": et_val, "sm": sm_val, "status": "LIVE"}
     except Exception as e:
-        return {"et": 4.85, "sm": 0.245, "status": "CACHED", "error": str(e)}
+        return {"et": "N/A", "sm": "N/A", "status": "ERROR", "error": str(e)}
+
+def load_safe(path):
+    import os, xarray as xr
+    if not os.path.exists(path): return None
+    with xr.open_dataset(path, engine='netcdf4') as ds:
+        return ds.load()
 
 @st.cache_data(ttl=10)
 def load_gridded_data():
     data_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'processed')
     try:
-        # Load the Real datasets covering All India directly
-        ds_rain = xr.open_dataset(os.path.join(data_dir, 'IMD_Gridded_Rainfall_0.25_Real_v2.nc'), engine='netcdf4')
-        ds_temp = xr.open_dataset(os.path.join(data_dir, 'IMD_Gridded_MaxTemp_1.0_Real.nc'), engine='netcdf4')
+        ds_rain = load_safe(os.path.join(data_dir, 'IMD_Gridded_Rainfall_0.25_Real_v4.nc'))
+        ds_temp = load_safe(os.path.join(data_dir, 'IMD_Gridded_MaxTemp_1.0_Real_v3.nc'))
         
-        min_path = os.path.join(data_dir, 'IMD_Gridded_MinTemp_1.0_Real.nc')
+        min_path = os.path.join(data_dir, 'IMD_Gridded_MinTemp_1.0_Real_v3.nc')
         lst_path = os.path.join(data_dir, 'MOSDAC_INSAT_LST_Real.nc')
         sst_path = os.path.join(data_dir, 'MOSDAC_INSAT_SST_Real.nc')
         rain_path = os.path.join(data_dir, 'MOSDAC_INSAT_Rainfall_Real.nc')
         
-        ds_mint = xr.open_dataset(min_path, engine='netcdf4') if os.path.exists(min_path) else None
-        ds_lst = xr.open_dataset(lst_path, engine='netcdf4') if os.path.exists(lst_path) else None
-        ds_sst = xr.open_dataset(sst_path, engine='netcdf4') if os.path.exists(sst_path) else None
-        ds_insat_rain = xr.open_dataset(rain_path, engine='netcdf4') if os.path.exists(rain_path) else None
+        ds_mint = load_safe(min_path)
+        ds_lst = load_safe(lst_path)
+        ds_sst = load_safe(sst_path)
+        ds_insat_rain = load_safe(rain_path)
         
         if ds_rain is None or ds_temp is None:
             raise ValueError("Required datasets (Rainfall and MaxTemp) could not be loaded.")
             
-        # Dynamically extend datasets to today's date if they end in the past
-        ds_rain = extend_dataset_to_today(ds_rain, 'rainfall')
-        ds_temp = extend_dataset_to_today(ds_temp, 'max_temp')
-        ds_mint = extend_dataset_to_today(ds_mint, 'min_temp')
-        ds_lst = extend_dataset_to_today(ds_lst, 'lst')
-        ds_sst = extend_dataset_to_today(ds_sst, 'sst')
-        ds_insat_rain = extend_dataset_to_today(ds_insat_rain, 'rain')
+
         
         return ds_rain, ds_temp, ds_mint, ds_lst, ds_sst, ds_insat_rain
     except Exception as e:
@@ -514,10 +477,15 @@ def load_gridded_data():
         return None, None, None, None, None, None
 
 # Load Models & Engines
-predictor = load_spatial_predictor_v3()
+predictor = load_spatial_predictor_v4()
 alert_engine = load_alert_engine_v3()
 copilot = load_copilot_engine()
 ds_rain, ds_temp, ds_mint, ds_lst, ds_sst, ds_insat_rain = load_gridded_data()
+
+# Compute Simulated NICES Soil Moisture
+ds_sm = None
+if ds_rain is not None and ds_temp is not None:
+    ds_sm = predictor.simulate_soil_moisture(ds_rain.rainfall.isel(time=-1), ds_temp.max_temp.isel(time=-1))
 
 # Sidebar Navigation & Configuration
 with st.sidebar:
@@ -551,8 +519,12 @@ with st.sidebar:
     st.header("Visual Aesthetics")
     map_style = st.radio(
         "Map Rendering Mode:",
-        ["Smooth Density Heatmap (Premium)", "Discrete Gridded Scatter"]
+        ["High-Resolution Pixel Grid (Lossless)", "Smooth Gradient Overlay (Premium)"]
     )
+    
+    st.markdown("---")
+    st.header("Multi-Variable Overlays")
+    overlay_wind = st.checkbox("Overlay Geostrophic Wind Vectors", value=False, help="Simulates physical wind flow using 90° rotated spatial temperature/pressure gradients.")
 
 # placeholder — header rendered after data is computed
 
@@ -560,7 +532,7 @@ if ds_rain is None:
     st.stop()
 
 # Helper to plot true geospatial Mapbox map
-def plot_spatial_map(data_array, title, colorscale, val_name="Value"):
+def plot_spatial_map(data_array, title, colorscale, val_name="Value", zmin=None, zmax=None, plot_wind=False):
     df = data_array.to_dataframe().reset_index()
     df = df.dropna()
     
@@ -580,34 +552,173 @@ def plot_spatial_map(data_array, title, colorscale, val_name="Value"):
         center_lat = (bbox[0] + bbox[1]) / 2.0
         center_lon = (bbox[2] + bbox[3]) / 2.0
         zoom = 5.0
-    
-    if "Smooth" in map_style:
-        is_high_res = "Rain" in val_name or "rain" in val_col
+
+    is_rain = "Rain" in val_name or "rain" in val_col
+    if "Smooth" in map_style and is_rain:
         if pilot_region == "All India":
-            radius = 12 if is_high_res else 22
+            radius = 12
         else:
-            radius = 25 if is_high_res else 42
+            radius = 25
             
         fig = px.density_mapbox(
             df, lat="lat", lon="lon", z=val_col,
             color_continuous_scale=colorscale, radius=radius,
+            range_color=[zmin, zmax] if (zmin is not None and zmax is not None) else None,
             zoom=zoom, center=dict(lat=center_lat, lon=center_lon),
-            mapbox_style="carto-darkmatter", title=title, opacity=0.85
+            mapbox_style="carto-darkmatter", title="", opacity=0.85
         )
+    elif "Smooth" in map_style and not is_rain:
+        import matplotlib.cm as cm
+        import matplotlib.colors as mcolors
+        from PIL import Image
+        import base64
+        from io import BytesIO
+
+        fig = go.Figure(go.Scattermapbox())
+        fig.update_layout(
+            mapbox_style="carto-darkmatter",
+            mapbox=dict(center=dict(lat=center_lat, lon=center_lon), zoom=zoom),
+            title="",
+            margin={"r":0,"t":10,"l":0,"b":0}
+        )
+
+        vals = data_array.values
+        if len(data_array.lat.values) > 1 and data_array.lat.values[0] < data_array.lat.values[1]:
+            vals = np.flipud(vals)
+
+        # -- HD Upscaling Algorithm --
+        from scipy.ndimage import distance_transform_edt, zoom
+        zoom_factor = 4
+        invalid = np.isnan(vals)
+        if not invalid.all():
+            # 1. Extrapolate valid pixels outwards to prevent edge blurring/ringing
+            _, ind = distance_transform_edt(invalid, return_distances=True, return_indices=True)
+            filled_vals = vals[tuple(ind)]
+            
+            # 2. Mathematically upsample the data 4x using cubic spline interpolation
+            hd_vals = zoom(filled_vals, zoom_factor, order=3)
+            
+            # 3. Upsample the mask to keep the sharp edges of the landmass
+            hd_mask = zoom((~invalid).astype(float), zoom_factor, order=1) > 0.5
+            
+            # 4. Re-apply the HD mask
+            hd_vals[~hd_mask] = np.nan
+            vals = hd_vals
+        # -----------------------------------------------------------------------------
+        # ----------------------------
+
+        vmin = zmin if zmin is not None else np.nanmin(vals)
+        vmax = zmax if zmax is not None else np.nanmax(vals)
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+        
+        import matplotlib as mpl
+        
+        cmap_name = colorscale if isinstance(colorscale, str) else 'turbo'
+        if cmap_name in mpl.colormaps:
+            cmap = mpl.colormaps[cmap_name]
+        elif cmap_name.lower() in mpl.colormaps:
+            cmap = mpl.colormaps[cmap_name.lower()]
+        elif cmap_name.title() in mpl.colormaps:
+            cmap = mpl.colormaps[cmap_name.title()]
+        else:
+            cmap = mpl.colormaps['turbo']
+            
+        rgba = cmap(norm(vals))
+        
+        rgba[..., 3] = np.where(np.isnan(vals), 0.0, 0.85)
+        
+        img = Image.fromarray(np.uint8(rgba * 255))
+        buffer = BytesIO()
+        img.save(buffer, format="PNG")
+        b64_str = base64.b64encode(buffer.getvalue()).decode()
+        
+        dlat = abs(data_array.lat.values[1] - data_array.lat.values[0]) / 2.0 if len(data_array.lat.values) > 1 else 0.125
+        dlon = abs(data_array.lon.values[1] - data_array.lon.values[0]) / 2.0 if len(data_array.lon.values) > 1 else 0.125
+        lon_min, lon_max = np.min(data_array.lon.values) - dlon, np.max(data_array.lon.values) + dlon
+        lat_min, lat_max = np.min(data_array.lat.values) - dlat, np.max(data_array.lat.values) + dlat
+        
+        fig.update_layout(
+            mapbox_layers=[{
+                "sourcetype": "image",
+                "source": f"data:image/png;base64,{b64_str}",
+                "coordinates": [[lon_min, lat_max], [lon_max, lat_max], [lon_max, lat_min], [lon_min, lat_min]]
+            }]
+        )
+        
+        # Dummy trace for colorbar
+        fig.add_trace(go.Scattermapbox(
+            lat=[center_lat, center_lat], lon=[center_lon, center_lon],
+            marker=dict(size=0, color=[vmin, vmax], colorscale=colorscale, showscale=True, 
+                        colorbar=dict(title=val_name, orientation="h", y=-0.15, x=0.5, len=0.8, thickness=10, outlinewidth=0)),
+            hoverinfo="none", showlegend=False
+        ))
+
     else:
         fig = px.scatter_mapbox(
             df, lat="lat", lon="lon", color=val_col,
             color_continuous_scale=colorscale, zoom=zoom, 
+            range_color=[zmin, zmax] if (zmin is not None and zmax is not None) else None,
             center=dict(lat=center_lat, lon=center_lon),
-            mapbox_style="carto-darkmatter", title=title, size_max=12, opacity=0.85
+            mapbox_style="carto-darkmatter", title="", opacity=0.85
         )
+        fig.update_traces(marker=dict(size=4.5 if pilot_region == "All India" else 9))
+    
+    if plot_wind and not is_rain:
+        try:
+            if isinstance(data_array, xr.DataArray):
+                # Mask to Indian landmass for clean wind vectors
+                masked_da = predictor.mask_region_boundary(data_array, pilot_region)
+                vals_for_wind = masked_da.values
+                lats_for_wind = masked_da.lat.values
+                lons_for_wind = masked_da.lon.values
+                
+                if len(lats_for_wind) > 1 and lats_for_wind[0] < lats_for_wind[1]:
+                    vals_for_wind = np.flipud(vals_for_wind)
+                    lats_for_wind = np.flipud(lats_for_wind)
+                
+                grad_y, grad_x = np.gradient(vals_for_wind)
+                U, V = -grad_y, grad_x
+                
+                magnitude = np.sqrt(U**2 + V**2)
+                magnitude[magnitude == 0] = 1e-10
+                U_norm, V_norm = U / magnitude, V / magnitude
+                
+                step = max(1, len(lats_for_wind) // 18)
+                arrow_lats, arrow_lons = [], []
+                scale = abs(lons_for_wind[-1] - lons_for_wind[0]) / 50.0
+                
+                for i in range(0, len(lats_for_wind), step):
+                    for j in range(0, len(lons_for_wind), step):
+                        if not np.isnan(vals_for_wind[i, j]):
+                            start_lat, start_lon = lats_for_wind[i], lons_for_wind[j]
+                            end_lat, end_lon = start_lat + V_norm[i, j] * scale, start_lon + U_norm[i, j] * scale
+                            
+                            angle = np.arctan2(end_lat - start_lat, end_lon - start_lon)
+                            head_len = scale * 0.35
+                            
+                            h1_lat, h1_lon = end_lat - head_len * np.sin(angle - np.pi/6), end_lon - head_len * np.cos(angle - np.pi/6)
+                            h2_lat, h2_lon = end_lat - head_len * np.sin(angle + np.pi/6), end_lon - head_len * np.cos(angle + np.pi/6)
+                            
+                            arrow_lats.extend([start_lat, end_lat, h1_lat, end_lat, h2_lat, None])
+                            arrow_lons.extend([start_lon, end_lon, h1_lon, end_lon, h2_lon, None])
+                
+                if arrow_lats:
+                    fig.add_trace(go.Scattermapbox(
+                        mode="lines", lat=arrow_lats, lon=arrow_lons,
+                        line=dict(color="rgba(255, 255, 255, 0.5)", width=1.2),
+                        hoverinfo="none", showlegend=False
+                    ))
+        except Exception:
+            pass
+
     
     fig.update_layout(
         paper_bgcolor="#111827", plot_bgcolor="#0B0F19", font=dict(color="#F8FAFC"),
-        height=520, margin=dict(l=15, r=15, t=50, b=15),
+        height=520, margin=dict(l=0, r=0, t=10, b=0),
         coloraxis_colorbar=dict(
-            title=dict(text=val_name, font=dict(color="#F8FAFC", size=12)),
-            bgcolor="#111827", tickfont=dict(color="#F8FAFC", size=11), len=0.85, thickness=15
+            title=dict(text=val_name, font=dict(color="#F8FAFC", size=11)),
+            bgcolor="rgba(0,0,0,0)", tickfont=dict(color="#F8FAFC", size=10), 
+            orientation="h", y=-0.15, x=0.5, len=0.8, thickness=10, outlinewidth=0
         )
     )
     return fig
@@ -738,19 +849,16 @@ Report dynamically compiled by India's AI Climate Digital Twin. Data grounded in
 if page == "Dashboard":
     # 1. Main Observation & Metrics Panel
     with st.container(border=True):
-        st.markdown(f'<h2 class="section-header" style="margin-top: 0px;">Spatial Climate Dashboard ({pilot_region})</h2>', unsafe_allow_html=True)
+        st.markdown(f'<h2 class="section-header" style="margin-top: 0px;">Historical Reanalysis & AI Forecasting Lab (2015-2026 Live)</h2>', unsafe_allow_html=True)
         
         # Date Selector Slider — default to today, keyed by region to reset on region change
         available_dates = pd.to_datetime(reg_rain.time.values)
         date_options = list(available_dates.strftime('%Y-%m-%d'))
         
-        today_str = datetime.now().strftime('%Y-%m-%d')
-        REAL_DATA_CUTOFF = '2023-12-31'
-        
-        # Force-reset slider to today when region changes (via session state)
+        # Force-reset slider to the most recent live data date when region changes
         slider_key = f"date_slider_{pilot_region}"
         if slider_key not in st.session_state:
-            st.session_state[slider_key] = today_str if today_str in date_options else date_options[-1]
+            st.session_state[slider_key] = date_options[-1]
         
         selected_date = st.select_slider(
             "Assimilated Date Selection:",
@@ -759,22 +867,7 @@ if page == "Dashboard":
             key=slider_key
         )
         
-        # Show badge if selected date is beyond real data coverage
-        is_synthetic = pd.to_datetime(selected_date) > pd.to_datetime(REAL_DATA_CUTOFF)
-        if is_synthetic:
-            st.markdown(f"""
-            <div style="display:flex; align-items:center; gap:8px; margin:-0.3rem 0 0.8rem 0;">
-                <div style="background:rgba(251,191,36,0.12); border:1px solid rgba(251,191,36,0.4); color:#FBBF24;
-                    padding:3px 10px; font-size:0.62rem; font-weight:700; letter-spacing:1.5px;">
-                    SYNTHETIC PROJECTION
-                </div>
-                <span style="font-size:0.72rem; color:#64748B;">
-                    Real IMD data ends <strong style="color:#94A3B8;">2023-12-31</strong>. 
-                    Dates beyond this are AI-extrapolated from the last observed grid state.
-                </span>
-            </div>""", unsafe_allow_html=True)
-        else:
-            st.markdown("<div style='margin-bottom:0.8rem;'></div>", unsafe_allow_html=True)
+
         
         target_dt = pd.to_datetime(selected_date)
         curr_rain = reg_rain.rainfall.sel(time=target_dt, method='nearest')
@@ -802,38 +895,46 @@ if page == "Dashboard":
         st.markdown(f'<h3 class="section-header" style="margin-top: 0px;">Geospatial Mapbox Assimilation ({selected_date})</h3>', unsafe_allow_html=True)
         st.markdown("<p style='font-size: 0.8rem; color: #94A3B8; margin-top: -0.5rem; margin-bottom: 0.8rem;'>Note: Dry grid points (<0.1 mm/day) are filtered out to highlight active precipitation bands. Coordinate data coverage is fully assimilated.</p>", unsafe_allow_html=True)
         
-        tab_rain, tab_maxt, tab_mint, tab_lst, tab_sst, tab_insat_rain, tab_fused = st.tabs([
+        tab_rain, tab_maxt, tab_mint, tab_lst, tab_sst, tab_insat_rain, tab_fused, tab_sm = st.tabs([
             "IMD Rainfall (0.25°)", 
             "IMD Max Temp (1.0°)", 
             "IMD Min Temp (1.0°)",
             "MOSDAC INSAT LST",
             "MOSDAC INSAT SST",
             "MOSDAC INSAT Rainfall",
-            "Assimilated Fused Grid"
+            "Assimilated Fused Grid",
+            "NICES Soil Moisture (Proxy)"
         ])
         
+        with tab_sm:
+            if ds_sm is not None:
+                curr_sm = predictor.slice_region(ds_sm, pilot_region)
+                event_sm = st.plotly_chart(plot_spatial_map(curr_sm, f"NICES Soil Moisture Proxy ({pilot_region})", "BrBG", val_name="Moisture (%)", plot_wind=overlay_wind), use_container_width=True, on_select="rerun")
+            else:
+                st.warning("Soil Moisture data not available.")
+        
         with tab_rain:
-            st.plotly_chart(plot_spatial_map(curr_rain, f"IMD Gridded Rainfall ({pilot_region})", "Blues", val_name="Rain (mm)"), use_container_width=True)
+            event_rain = st.plotly_chart(plot_spatial_map(curr_rain, f"IMD Gridded Rainfall ({pilot_region})", "Blues", val_name="Rain (mm)", plot_wind=overlay_wind), use_container_width=True, on_select="rerun")
         with tab_maxt:
-            st.plotly_chart(plot_spatial_map(curr_temp, f"IMD Gridded Max Temp ({pilot_region})", "YlOrRd", val_name="Max Temp (°C)"), use_container_width=True)
+            event_maxt = st.plotly_chart(plot_spatial_map(curr_temp, f"IMD Gridded Max Temp ({pilot_region})", "YlOrRd", val_name="Max Temp (°C)", plot_wind=overlay_wind), use_container_width=True, on_select="rerun")
         with tab_mint:
             if curr_mint is not None:
-                st.plotly_chart(plot_spatial_map(curr_mint, f"IMD Gridded Min Temp ({pilot_region})", "Viridis", val_name="Min Temp (°C)"), use_container_width=True)
+                event_mint = st.plotly_chart(plot_spatial_map(curr_mint, f"IMD Gridded Min Temp ({pilot_region})", "Viridis", val_name="Min Temp (°C)", plot_wind=overlay_wind), use_container_width=True, on_select="rerun")
             else:
                 st.warning("Minimum Temperature data not available for this date.")
         with tab_lst:
             if curr_lst is not None:
-                st.plotly_chart(plot_spatial_map(curr_lst, f"MOSDAC INSAT LST ({pilot_region})", "Magma", val_name="LST (°C)"), use_container_width=True)
+                event_lst = st.plotly_chart(plot_spatial_map(curr_lst, f"MOSDAC INSAT LST ({pilot_region})", "Magma", val_name="LST (°C)"), use_container_width=True, on_select="rerun")
             else:
                 st.warning("LST data not available for this date.")
         with tab_sst:
             if curr_sst is not None:
-                st.plotly_chart(plot_spatial_map(curr_sst, f"MOSDAC INSAT SST ({pilot_region})", "Jet", val_name="SST (°C)"), use_container_width=True)
+                event_sst = st.plotly_chart(plot_spatial_map(curr_sst, f"MOSDAC INSAT SST ({pilot_region})", "Jet", val_name="SST (°C)"), use_container_width=True, on_select="rerun")
             else:
                 st.warning("SST data not available for this date.")
         with tab_insat_rain:
             if curr_insat_rain is not None:
-                st.plotly_chart(plot_spatial_map(curr_insat_rain, f"MOSDAC INSAT Rainfall ({pilot_region})", "Teal", val_name="Rain (mm)"), use_container_width=True)
+                event_insat_rain = st.plotly_chart(plot_spatial_map(curr_insat_rain, f"MOSDAC INSAT Rainfall ({pilot_region})", "Teal", val_name="Rain (mm)"), use_container_width=True, on_select="rerun")
             else:
                 st.warning("INSAT Rainfall data not available for this date.")
         with tab_fused:
@@ -843,7 +944,7 @@ if page == "Dashboard":
                     try:
                         insat_interp = curr_insat_rain.interp_like(curr_rain, method="nearest")
                         fused_rain = predictor.assimilate_multi_source_data(curr_rain, insat_interp, variable="rainfall")
-                        st.plotly_chart(plot_spatial_map(fused_rain, f"Assimilated Fused Rainfall ({pilot_region})", "Blues", val_name="Rain (mm)"), use_container_width=True)
+                        event_fused = st.plotly_chart(plot_spatial_map(fused_rain, f"Assimilated Fused Rainfall ({pilot_region})", "Blues", val_name="Rain (mm)"), use_container_width=True, on_select="rerun")
                     except Exception as e:
                         st.warning(f"Data assimilation failed: {e}")
                 else:
@@ -853,11 +954,203 @@ if page == "Dashboard":
                     try:
                         lst_interp = curr_lst.interp_like(curr_temp, method="nearest")
                         fused_temp = predictor.assimilate_multi_source_data(curr_temp, lst_interp, variable="temperature")
-                        st.plotly_chart(plot_spatial_map(fused_temp, f"Assimilated Fused Temperature ({pilot_region})", "YlOrRd", val_name="Temp (°C)"), use_container_width=True)
+                        event_fused = st.plotly_chart(plot_spatial_map(fused_temp, f"Assimilated Fused Temperature ({pilot_region})", "YlOrRd", val_name="Temp (°C)"), use_container_width=True, on_select="rerun")
                     except Exception as e:
                         st.warning(f"Data assimilation failed: {e}")
                 else:
                     st.warning("Temperature or INSAT LST dataset is missing.")
+                    
+        # Map Click Drill-Down Logic
+        clicked_pt = None
+        target_var_grid = None
+        target_var_name = None
+        val_lbl_drill = None
+        
+        if 'prev_rain_pt' not in st.session_state: st.session_state['prev_rain_pt'] = None
+        if 'prev_maxt_pt' not in st.session_state: st.session_state['prev_maxt_pt'] = None
+        if 'prev_mint_pt' not in st.session_state: st.session_state['prev_mint_pt'] = None
+        if 'prev_lst_pt' not in st.session_state: st.session_state['prev_lst_pt'] = None
+        if 'prev_sst_pt' not in st.session_state: st.session_state['prev_sst_pt'] = None
+        if 'prev_insat_rain_pt' not in st.session_state: st.session_state['prev_insat_rain_pt'] = None
+        if 'prev_fused_pt' not in st.session_state: st.session_state['prev_fused_pt'] = None
+        if 'prev_sm_pt' not in st.session_state: st.session_state['prev_sm_pt'] = None
+        if 'active_drill_map' not in st.session_state: st.session_state['active_drill_map'] = None
+        
+        curr_rain_pt = event_rain.selection["points"][0] if ('event_rain' in locals() and event_rain and event_rain.selection.get("points")) else None
+        curr_maxt_pt = event_maxt.selection["points"][0] if ('event_maxt' in locals() and event_maxt and event_maxt.selection.get("points")) else None
+        curr_mint_pt = event_mint.selection["points"][0] if ('event_mint' in locals() and event_mint and event_mint.selection.get("points")) else None
+        curr_lst_pt = event_lst.selection["points"][0] if ('event_lst' in locals() and event_lst and event_lst.selection.get("points")) else None
+        curr_sst_pt = event_sst.selection["points"][0] if ('event_sst' in locals() and event_sst and event_sst.selection.get("points")) else None
+        curr_insat_rain_pt = event_insat_rain.selection["points"][0] if ('event_insat_rain' in locals() and event_insat_rain and event_insat_rain.selection.get("points")) else None
+        curr_fused_pt = event_fused.selection["points"][0] if ('event_fused' in locals() and event_fused and event_fused.selection.get("points")) else None
+        curr_sm_pt = event_sm.selection["points"][0] if ('event_sm' in locals() and event_sm and event_sm.selection.get("points")) else None
+        
+        if curr_rain_pt != st.session_state['prev_rain_pt']:
+            st.session_state['active_drill_map'] = 'rain' if curr_rain_pt else None
+            st.session_state['prev_rain_pt'] = curr_rain_pt
+        if curr_maxt_pt != st.session_state['prev_maxt_pt']:
+            st.session_state['active_drill_map'] = 'maxt' if curr_maxt_pt else None
+            st.session_state['prev_maxt_pt'] = curr_maxt_pt
+        if curr_mint_pt != st.session_state['prev_mint_pt']:
+            st.session_state['active_drill_map'] = 'mint' if curr_mint_pt else None
+            st.session_state['prev_mint_pt'] = curr_mint_pt
+        if curr_lst_pt != st.session_state['prev_lst_pt']:
+            st.session_state['active_drill_map'] = 'lst' if curr_lst_pt else None
+            st.session_state['prev_lst_pt'] = curr_lst_pt
+        if curr_sst_pt != st.session_state['prev_sst_pt']:
+            st.session_state['active_drill_map'] = 'sst' if curr_sst_pt else None
+            st.session_state['prev_sst_pt'] = curr_sst_pt
+        if curr_insat_rain_pt != st.session_state['prev_insat_rain_pt']:
+            st.session_state['active_drill_map'] = 'insat_rain' if curr_insat_rain_pt else None
+            st.session_state['prev_insat_rain_pt'] = curr_insat_rain_pt
+        if curr_fused_pt != st.session_state['prev_fused_pt']:
+            st.session_state['active_drill_map'] = 'fused' if curr_fused_pt else None
+            st.session_state['prev_fused_pt'] = curr_fused_pt
+        if curr_sm_pt != st.session_state['prev_sm_pt']:
+            st.session_state['active_drill_map'] = 'sm' if curr_sm_pt else None
+            st.session_state['prev_sm_pt'] = curr_sm_pt
+        if curr_mint_pt != st.session_state['prev_mint_pt']:
+            st.session_state['active_drill_map'] = 'mint' if curr_mint_pt else None
+            st.session_state['prev_mint_pt'] = curr_mint_pt
+        if curr_lst_pt != st.session_state['prev_lst_pt']:
+            st.session_state['active_drill_map'] = 'lst' if curr_lst_pt else None
+            st.session_state['prev_lst_pt'] = curr_lst_pt
+        if curr_sst_pt != st.session_state['prev_sst_pt']:
+            st.session_state['active_drill_map'] = 'sst' if curr_sst_pt else None
+            st.session_state['prev_sst_pt'] = curr_sst_pt
+        if curr_insat_rain_pt != st.session_state['prev_insat_rain_pt']:
+            st.session_state['active_drill_map'] = 'insat_rain' if curr_insat_rain_pt else None
+            st.session_state['prev_insat_rain_pt'] = curr_insat_rain_pt
+        if curr_fused_pt != st.session_state['prev_fused_pt']:
+            st.session_state['active_drill_map'] = 'fused' if curr_fused_pt else None
+            st.session_state['prev_fused_pt'] = curr_fused_pt
+        if curr_sm_pt != st.session_state['prev_sm_pt']:
+            st.session_state['active_drill_map'] = 'sm' if curr_sm_pt else None
+            st.session_state['prev_sm_pt'] = curr_sm_pt
+            
+        # Determine what to display based on the active map
+        if st.session_state['active_drill_map'] == 'rain' and curr_rain_pt:
+            clicked_pt = curr_rain_pt
+            target_var_grid = reg_rain.rainfall
+            target_var_name = "Rainfall (mm/day)"
+            val_lbl_drill = "Rain (mm)"
+        elif st.session_state['active_drill_map'] == 'maxt' and curr_maxt_pt:
+            clicked_pt = curr_maxt_pt
+            target_var_grid = reg_temp.max_temp
+            target_var_name = "Maximum Temperature (°C)"
+            val_lbl_drill = "Temp (°C)"
+        elif st.session_state['active_drill_map'] == 'sm' and curr_sm_pt:
+            clicked_pt = curr_sm_pt
+            target_var_grid = ds_sm # Time dimension doesn't exist natively on sm proxy but drill down takes lat/lon
+            target_var_name = "Soil Moisture Proxy (%)"
+            val_lbl_drill = "Moisture (%)"
+        elif st.session_state['active_drill_map'] == 'mint' and curr_mint_pt:
+            clicked_pt = curr_mint_pt
+            target_var_grid = reg_mint.min_temp
+            target_var_name = "Minimum Temperature (°C)"
+            val_lbl_drill = "Temp (°C)"
+        elif st.session_state['active_drill_map'] == 'lst' and curr_lst_pt:
+            clicked_pt = curr_lst_pt
+            target_var_grid = reg_lst.lst
+            target_var_name = "MOSDAC INSAT LST"
+            val_lbl_drill = "Temp (°C)"
+        elif st.session_state['active_drill_map'] == 'sst' and curr_sst_pt:
+            clicked_pt = curr_sst_pt
+            target_var_grid = reg_sst.sst
+            target_var_name = "MOSDAC INSAT SST"
+            val_lbl_drill = "Temp (°C)"
+        elif st.session_state['active_drill_map'] == 'insat_rain' and curr_insat_rain_pt:
+            clicked_pt = curr_insat_rain_pt
+            target_var_grid = reg_insat_rain.rain
+            target_var_name = "MOSDAC INSAT Rainfall"
+            val_lbl_drill = "Rain (mm)"
+        elif st.session_state['active_drill_map'] == 'fused' and curr_fused_pt:
+            clicked_pt = curr_fused_pt
+            if "Rainfall" in fused_var:
+                target_var_grid = fused_rain
+                target_var_name = "Assimilated Fused Rainfall"
+                val_lbl_drill = "Rain (mm)"
+            else:
+                target_var_grid = fused_temp
+                target_var_name = "Assimilated Fused Temperature"
+                val_lbl_drill = "Temp (°C)"
+            
+        if map_style == "High-Resolution Pixel Grid (Lossless)":
+            col_msg, col_btn = st.columns([4, 1])
+            with col_msg:
+                st.markdown("<p style='font-size: 0.75rem; color: #38BDF8; margin-top: 0.5rem;'>Interactive Mode: Click on any point in ANY map to instantly generate a localized 7-day ConvLSTM temporal forecast.</p>", unsafe_allow_html=True)
+            with col_btn:
+                if st.session_state['active_drill_map'] is not None:
+                    if st.button("Clear Selection"):
+                        # Keep prev_pt intact so we don't immediately re-trigger the event
+                        st.session_state['active_drill_map'] = None
+                        st.rerun()
+            
+        if clicked_pt and "lat" in clicked_pt and "lon" in clicked_pt:
+            sel_lat = float(clicked_pt["lat"])
+            sel_lon = float(clicked_pt["lon"])
+            
+            with st.expander(f"Localized AI Forecast for Coordinates: {sel_lat:.2f}°N, {sel_lon:.2f}°E", expanded=True):
+                with st.spinner(f"Running ConvLSTM inference for {sel_lat:.2f}, {sel_lon:.2f}..."):
+                    try:
+                        # Nearest indices
+                        lats = target_var_grid.lat.values
+                        lons = target_var_grid.lon.values
+                        lat_idx = np.abs(lats - sel_lat).argmin()
+                        lon_idx = np.abs(lons - sel_lon).argmin()
+                        actual_lat = lats[lat_idx]
+                        actual_lon = lons[lon_idx]
+                        
+                        # 30-day historical
+                        hist_days = min(30, len(target_var_grid.time))
+                        hist_series = target_var_grid.isel(lat=lat_idx, lon=lon_idx).values[-hist_days:]
+                        hist_dates = pd.to_datetime(target_var_grid.time.values[-hist_days:])
+                        
+                        # AI Inference
+                        predictions, lower_b, upper_b = predictor.predict_rainfall_next_days_spatial(target_var_grid, days_ahead=7)
+                        
+                        pt_preds = [float(p[lat_idx, lon_idx]) for p in predictions]
+                        pt_lower = [float(l[lat_idx, lon_idx]) for l in lower_b]
+                        pt_upper = [float(u[lat_idx, lon_idx]) for u in upper_b]
+                        
+                        last_date = hist_dates[-1]
+                        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=7, freq='D')
+                        
+                        fig_pt = go.Figure()
+                        fig_pt.add_trace(go.Scatter(
+                            x=hist_dates, y=hist_series, mode='lines+markers', 
+                            line=dict(color='#94A3B8', width=2), marker=dict(size=5, color='#CBD5E1'), 
+                            name='Historical Observation'
+                        ))
+                        fut_x_list = list(future_dates)
+                        fig_pt.add_trace(go.Scatter(
+                            x=fut_x_list + fut_x_list[::-1], y=pt_upper + pt_lower[::-1], 
+                            fill='toself', fillcolor='rgba(255, 107, 0, 0.15)', 
+                            line=dict(color='rgba(255,255,255,0)'), hoverinfo="skip", 
+                            showlegend=True, name='Forecast Uncertainty (±1σ)'
+                        ))
+                        fig_pt.add_trace(go.Scatter(
+                            x=future_dates, y=pt_preds, mode='lines+markers', 
+                            line=dict(color='#FF6B00', width=3, dash='dash'), marker=dict(size=6, color='#FF6B00'), 
+                            name='AI Forecast'
+                        ))
+                        if not np.isnan(hist_series[-1]):
+                            fig_pt.add_trace(go.Scatter(
+                                x=[last_date, future_dates[0]], y=[float(hist_series[-1]), pt_preds[0]],
+                                mode='lines', line=dict(color='#FF6B00', width=3, dash='dash'), 
+                                showlegend=False, hoverinfo='skip'
+                            ))
+                            
+                        fig_pt.update_layout(
+                            title=f"{target_var_name} Forecast at {actual_lat:.2f}°N, {actual_lon:.2f}°E",
+                            paper_bgcolor="#111827", plot_bgcolor="#0B0F19", font=dict(color="#F8FAFC"),
+                            xaxis=dict(title="Date", gridcolor="#1E293B"), 
+                            yaxis=dict(title=val_lbl_drill, gridcolor="#1E293B"),
+                            hovermode="x unified", height=400, margin=dict(l=20, r=20, t=40, b=20)
+                        )
+                        st.plotly_chart(fig_pt, use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Failed to generate drill-down forecast: {e}")
 
     # 3. Bottom Row: Alerts and AI Copilot side-by-side
     col_bottom_left, col_bottom_right = st.columns(2)
@@ -930,42 +1223,156 @@ elif page == "Spatial Predictions":
                 
                 predictions, lower_b, upper_b = predictor.predict_rainfall_next_days_spatial(base_grid, days_ahead=pred_days)
                 
+                # Store in session state for interactivity
+                st.session_state['spatial_preds'] = {
+                    'predictions': predictions,
+                    'lower_b': lower_b,
+                    'upper_b': upper_b,
+                    'variable_sel': variable_sel,
+                    'pred_days': pred_days,
+                    'base_grid': base_grid,
+                    'c_scale': c_scale,
+                    'val_lbl': val_lbl
+                }
                 st.success(f"Successfully generated spatial and temporal forecast for day +1 to +{pred_days}")
-                
-                # Plot 1: Time Series Forecast with Uncertainty Bands
-                st.markdown('<h3 class="section-header">Regional Average Forecast with Uncertainty Intervals (±1σ)</h3>', unsafe_allow_html=True)
-                
-                days_x = [f"Day +{i+1}" for i in range(pred_days)]
-                mean_pred = [float(np.nanmean(p)) for p in predictions]
-                mean_lower = [float(np.nanmean(l)) for l in lower_b]
-                mean_upper = [float(np.nanmean(u)) for u in upper_b]
-                
-                fig_ts = go.Figure()
-                fig_ts.add_trace(go.Scatter(x=days_x + days_x[::-1], y=mean_upper + mean_lower[::-1], fill='toself', fillcolor='rgba(56, 189, 248, 0.2)', line=dict(color='rgba(255,255,255,0)'), hoverinfo="skip", showlegend=True, name='Uncertainty Interval (±1σ)'))
-                fig_ts.add_trace(go.Scatter(x=days_x, y=mean_pred, mode='lines+markers', line=dict(color='#FF6B00', width=3), marker=dict(size=8, color='#38BDF8'), name='Predicted Mean'))
-                
-                fig_ts.update_layout(
-                    title=f"{variable_sel} Forecast ({pilot_region} Average)",
-                    paper_bgcolor="#111827", plot_bgcolor="#0B0F19", font=dict(color="#F8FAFC"),
-                    xaxis=dict(title="Forecast Horizon", gridcolor="#1E293B"), yaxis=dict(title=variable_sel, gridcolor="#1E293B")
-                )
-                st.plotly_chart(fig_ts, use_container_width=True)
-                
-                # Plot 2: Final Day Spatial Mapbox (Side-by-Side Mean & Uncertainty)
-                st.markdown(f'<h3 class="section-header">Forecasted Geospatial Distribution & Uncertainty (Day +{pred_days})</h3>', unsafe_allow_html=True)
-                col_m1, col_m2 = st.columns(2)
-                
-                final_day_pred = xr.DataArray(predictions[-1], coords=[base_grid.lat, base_grid.lon], dims=["lat", "lon"], name="pred_var")
-                uncertainty_grid = (upper_b[-1] - lower_b[-1]) / 2.0
-                final_day_unc = xr.DataArray(uncertainty_grid, coords=[base_grid.lat, base_grid.lon], dims=["lat", "lon"], name="unc_var")
-                
-                with col_m1:
-                    st.plotly_chart(plot_spatial_map(final_day_pred, f"Predicted Mean {variable_sel} (Day +{pred_days})", c_scale, val_name=val_lbl), use_container_width=True)
-                with col_m2:
-                    st.plotly_chart(plot_spatial_map(final_day_unc, f"Prediction Uncertainty (±1σ Standard Deviation)", "Purples", val_name="Std Dev"), use_container_width=True)
-                
             except Exception as e:
                 st.error(f"Prediction failed: {e}")
+
+    if 'spatial_preds' in st.session_state:
+        sp_data = st.session_state['spatial_preds']
+        predictions = sp_data['predictions']
+        lower_b = sp_data['lower_b']
+        upper_b = sp_data['upper_b']
+        variable_sel = sp_data['variable_sel']
+        pred_days = sp_data['pred_days']
+        base_grid = sp_data['base_grid']
+        c_scale = sp_data['c_scale']
+        val_lbl = sp_data['val_lbl']
+        
+        # Plot 1: Time Series Forecast with Uncertainty Bands
+        st.markdown('<h3 class="section-header">Regional Average Forecast with Uncertainty Intervals (±1σ)</h3>', unsafe_allow_html=True)
+        
+        days_x = [f"Day +{i+1}" for i in range(pred_days)]
+        mean_pred = [float(np.nanmean(p)) for p in predictions]
+        mean_lower = [float(np.nanmean(l)) for l in lower_b]
+        mean_upper = [float(np.nanmean(u)) for u in upper_b]
+        
+        fig_ts = go.Figure()
+        fig_ts.add_trace(go.Scatter(x=days_x + days_x[::-1], y=mean_upper + mean_lower[::-1], fill='toself', fillcolor='rgba(56, 189, 248, 0.2)', line=dict(color='rgba(255,255,255,0)'), hoverinfo="skip", showlegend=True, name='Uncertainty Interval (±1σ)'))
+        fig_ts.add_trace(go.Scatter(x=days_x, y=mean_pred, mode='lines+markers', line=dict(color='#FF6B00', width=3), marker=dict(size=8, color='#38BDF8'), name='Predicted Mean'))
+        
+        fig_ts.update_layout(
+            title=f"{variable_sel} Forecast ({pilot_region} Average)",
+            paper_bgcolor="#111827", plot_bgcolor="#0B0F19", font=dict(color="#F8FAFC"),
+            xaxis=dict(title="Forecast Horizon", gridcolor="#1E293B"), yaxis=dict(title=variable_sel, gridcolor="#1E293B")
+        )
+        st.plotly_chart(fig_ts, use_container_width=True)
+        
+        # Plot 2: Final Day Spatial Mapbox (Side-by-Side Mean & Uncertainty)
+        st.markdown(f'<h3 class="section-header">Forecasted Geospatial Distribution & Uncertainty (Day +{pred_days})</h3>', unsafe_allow_html=True)
+        col_m1, col_m2 = st.columns(2)
+        
+        final_day_pred = xr.DataArray(predictions[-1], coords=[base_grid.lat, base_grid.lon], dims=["lat", "lon"], name="pred_var")
+        uncertainty_grid = (upper_b[-1] - lower_b[-1]) / 2.0
+        final_day_unc = xr.DataArray(uncertainty_grid, coords=[base_grid.lat, base_grid.lon], dims=["lat", "lon"], name="unc_var")
+        
+        with col_m1:
+            event = st.plotly_chart(plot_spatial_map(final_day_pred, f"Predicted Mean {variable_sel} (Day +{pred_days})", c_scale, val_name=val_lbl), use_container_width=True, on_select="rerun")
+        with col_m2:
+            st.plotly_chart(plot_spatial_map(final_day_unc, f"Prediction Uncertainty (±1σ Standard Deviation)", "Purples", val_name="Std Dev"), use_container_width=True)
+        
+        # Plot 3: Point-Click Temporal Forecast (Drill-Down)
+        st.markdown('<h3 class="section-header">Point Coordinate Temporal Forecast</h3>', unsafe_allow_html=True)
+        if map_style == "High-Resolution Pixel Grid (Lossless)":
+            st.write("Click directly on the 'Predicted Mean' map above, or use the exact coordinate inputs below, to view the 7-day temporal forecast.")
+        else:
+            st.write("Select specific Latitude and Longitude coordinates below to view the localized 7-day temporal forecast.")
+        
+        lats = base_grid.lat.values
+        lons = base_grid.lon.values
+        
+        # Safely determine bounding box
+        min_lat, max_lat = float(np.min(lats)), float(np.max(lats))
+        min_lon, max_lon = float(np.min(lons)), float(np.max(lons))
+        mid_lat = float((min_lat + max_lat) / 2.0)
+        mid_lon = float((min_lon + max_lon) / 2.0)
+        
+        # Detect Map Click Event
+        clicked_lat, clicked_lon = None, None
+        if event and event.selection.get("points"):
+            pt = event.selection["points"][0]
+            if "lat" in pt and "lon" in pt:
+                clicked_lat = float(pt["lat"])
+                clicked_lon = float(pt["lon"])
+        
+        col_pt1, col_pt2 = st.columns(2)
+        with col_pt1:
+            sel_lat = st.number_input("Latitude (°N)", min_value=min_lat, max_value=max_lat, value=clicked_lat if clicked_lat is not None else mid_lat, step=0.25)
+        with col_pt2:
+            sel_lon = st.number_input("Longitude (°E)", min_value=min_lon, max_value=max_lon, value=clicked_lon if clicked_lon is not None else mid_lon, step=0.25)
+        
+        # Find nearest grid indices
+        lat_idx = np.abs(lats - sel_lat).argmin()
+        lon_idx = np.abs(lons - sel_lon).argmin()
+        actual_lat = lats[lat_idx]
+        actual_lon = lons[lon_idx]
+        
+        # Extract Historical 30-day context
+        hist_days = min(30, len(base_grid.time))
+        hist_series = base_grid.isel(lat=lat_idx, lon=lon_idx).values[-hist_days:]
+        hist_dates = pd.to_datetime(base_grid.time.values[-hist_days:])
+        
+        # Extract Predicted 7-day forecast for the specific point
+        pt_preds = [float(p[lat_idx, lon_idx]) for p in predictions]
+        pt_lower = [float(l[lat_idx, lon_idx]) for l in lower_b]
+        pt_upper = [float(u[lat_idx, lon_idx]) for u in upper_b]
+        
+        # Create continuous timeline
+        last_date = hist_dates[-1]
+        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=pred_days, freq='D')
+        
+        fig_pt = go.Figure()
+        
+        # Historical Trace
+        fig_pt.add_trace(go.Scatter(
+            x=hist_dates, y=hist_series, mode='lines+markers', 
+            line=dict(color='#94A3B8', width=2), marker=dict(size=5, color='#CBD5E1'), 
+            name='Historical Observation'
+        ))
+        
+        # Prediction Uncertainty Shadow
+        fut_x_list = list(future_dates)
+        fig_pt.add_trace(go.Scatter(
+            x=fut_x_list + fut_x_list[::-1], 
+            y=pt_upper + pt_lower[::-1], 
+            fill='toself', fillcolor='rgba(255, 107, 0, 0.15)', 
+            line=dict(color='rgba(255,255,255,0)'), hoverinfo="skip", 
+            showlegend=True, name='Forecast Uncertainty (±1σ)'
+        ))
+        
+        # Prediction Mean Trace
+        fig_pt.add_trace(go.Scatter(
+            x=future_dates, y=pt_preds, mode='lines+markers', 
+            line=dict(color='#FF6B00', width=3, dash='dash'), marker=dict(size=6, color='#FF6B00'), 
+            name='AI Forecast'
+        ))
+        
+        # Connection line to make the graph visually continuous
+        if not np.isnan(hist_series[-1]):
+            fig_pt.add_trace(go.Scatter(
+                x=[last_date, future_dates[0]], y=[float(hist_series[-1]), pt_preds[0]],
+                mode='lines', line=dict(color='#FF6B00', width=3, dash='dash'), 
+                showlegend=False, hoverinfo='skip'
+            ))
+            
+        fig_pt.update_layout(
+            title=f"Time-Series Analysis at Coordinates: {actual_lat:.2f}°N, {actual_lon:.2f}°E",
+            paper_bgcolor="#111827", plot_bgcolor="#0B0F19", font=dict(color="#F8FAFC"),
+            xaxis=dict(title="Date", gridcolor="#1E293B"), 
+            yaxis=dict(title=val_lbl, gridcolor="#1E293B"),
+            hovermode="x unified", height=450
+        )
+        st.plotly_chart(fig_pt, use_container_width=True)
 
 # PAGE 3: WHAT-IF SIMULATION
 elif page == "What-If Simulation":
@@ -1099,18 +1506,18 @@ elif page == "Analysis":
         col_da1, col_da2, col_da3 = st.columns(3)
         with col_da1:
             st.markdown("##### IMD Ground Max Temp (1.0°)")
-            st.plotly_chart(plot_spatial_map(latest_temp, "IMD Ground Max Temp (1.0°)", "YlOrRd", val_name="Temp (°C)"), use_container_width=True)
+            st.plotly_chart(plot_spatial_map(latest_temp, "IMD Ground Max Temp (1.0°)", "YlOrRd", val_name="Temp (°C)", zmin=20, zmax=45), use_container_width=True)
         with col_da2:
             st.markdown("##### MOSDAC INSAT LST (1.0°)")
-            st.plotly_chart(plot_spatial_map(latest_lst, "MOSDAC INSAT LST (1.0°)", "YlOrRd", val_name="LST (°C)"), use_container_width=True)
+            st.plotly_chart(plot_spatial_map(latest_lst, "MOSDAC INSAT LST (1.0°)", "YlOrRd", val_name="LST (°C)", zmin=20, zmax=45), use_container_width=True)
         with col_da3:
             st.markdown("##### Fused Grid (Optimal Interpolated)")
-            st.plotly_chart(plot_spatial_map(fused_temp, "Fused High-Fidelity Temperature", "YlOrRd", val_name="Fused Temp (°C)"), use_container_width=True)
+            st.plotly_chart(plot_spatial_map(fused_temp, "Fused High-Fidelity Temperature", "YlOrRd", val_name="Fused Temp (°C)", zmin=20, zmax=45), use_container_width=True)
     else:
         col_da1, col_da2 = st.columns(2)
         with col_da1:
             st.markdown("##### IMD Ground Max Temp (1.0°)")
-            st.plotly_chart(plot_spatial_map(latest_temp, "IMD Ground Max Temp (1.0°)", "YlOrRd", val_name="Temp (°C)"), use_container_width=True)
+            st.plotly_chart(plot_spatial_map(latest_temp, "IMD Ground Max Temp (1.0°)", "YlOrRd", val_name="Temp (°C)", zmin=20, zmax=45), use_container_width=True)
         with col_da2:
             st.markdown("##### MOSDAC INSAT LST Status")
             st.warning("MOSDAC INSAT LST dataset not found or locked.")
@@ -1135,20 +1542,21 @@ elif page == "Analysis":
 
     # ── FEATURE 4: 3D TOPOGRAPHICAL & OROGRAPHIC CLIMATE SLICING ───────────────
     st.markdown('<h2 class="section-header">3D Topographical & Orographic Climate Slicing</h2>', unsafe_allow_html=True)
-    st.write("Mapping live rainfall and thermal distributions across approximate national digital elevation models (Western Ghats & Himalayan profiles).")
+    st.write("Mapping live rainfall and thermal distributions across an authentic High-Resolution Digital Elevation Model (NOAA ETOPO 2022).")
     
-    df_3d = latest_temp.to_dataframe().reset_index().dropna()
-    df_3d['approx_elevation_m'] = np.where(
-        df_3d['lat'] > 28.0, 
-        (df_3d['lat'] - 28.0) * 450 + 1000,
-        np.where(
-            (df_3d['lon'] > 73.5) & (df_3d['lon'] < 75.5) & (df_3d['lat'] < 20.0),
-            850.0,
-            300.0
-        )
-    )
-    df_3d['approx_elevation_m'] += np.random.normal(0, 50, len(df_3d))
-    df_3d['approx_elevation_m'] = np.maximum(10, df_3d['approx_elevation_m'])
+    df_3d = latest_temp.to_dataframe(name='max_temp').reset_index().dropna()
+    
+    try:
+        dem_path = os.path.join('data', 'processed', 'india_dem_0.25.nc')
+        ds_dem = xr.open_dataset(dem_path)
+        
+        lats = xr.DataArray(df_3d['lat'].values, dims='points')
+        lons = xr.DataArray(df_3d['lon'].values, dims='points')
+        
+        elevations = ds_dem['z'].sel(lat=lats, lon=lons, method='nearest').values
+        df_3d['approx_elevation_m'] = np.maximum(0, elevations)
+    except Exception as e:
+        df_3d['approx_elevation_m'] = 0
     
     fig_3d = px.scatter_3d(
         df_3d, x="lon", y="lat", z="approx_elevation_m", color="max_temp",
@@ -1166,36 +1574,66 @@ elif page == "Analysis":
     st.plotly_chart(fig_3d, use_container_width=True)
 
     # ── FEATURE 5: LIVE WMS TILE / INSAT SATELLITE FEED INTEGRATION ────────────
-    st.markdown('<h2 class="section-header">Live Web Map Service (WMS) & Satellite Imagery Feeds</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-header" style="color: #38BDF8;"> Live Web Map Service (WMS) & Satellite Feeds (Live 2026 Data)</h2>', unsafe_allow_html=True)
     st.info("Integrating live and near-real-time satellite observation feeds from MOSDAC and global Earth Observation Web Map Services (WMS).")
-    
-    col_wms1, col_wms2 = st.columns(2)
-    with col_wms1:
-        st.markdown("#### MOSDAC INSAT-3D / 3DR Imager Feed")
-        st.write("Real-time geostationary satellite thermal infrared and visible cloud observations over the Indian subcontinent.")
-        st.markdown("""<div style="border: 1px solid #1E293B; padding: 15px; background-color: #111827;">
-        <b>Endpoint</b>: <code>https://mosdac.gov.in/cgi-bin/wms</code><br>
-        <b>Layer</b>: <code>3RIMG_L2B_TIR1</code> (Thermal Infrared)<br>
-        <b>Status</b>: <span style="color:#10B981;">ONLINE (Active WMS Subscription)</span>
-        </div>""", unsafe_allow_html=True)
-        st.caption("Matches live gridded satellite rainfall and LST derivations shown in the mapbox layers.")
-        
-    with col_wms2:
-        st.markdown("#### NASA GIBS Earth Observation WMS")
-        st.write("High-resolution MODIS & VIIRS Land Surface Temperature and Reflectance composite tile feeds.")
-        st.markdown("""<div style="border: 1px solid #1E293B; padding: 15px; background-color: #111827;">
-        <b>Endpoint</b>: <code>https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi</code><br>
-        <b>Layer</b>: <code>MODIS_Terra_Land_Surface_Temp_Day</code><br>
-        <b>Status</b>: <span style="color:#10B981;">ONLINE (Active WMS Subscription)</span>
-        </div>""", unsafe_allow_html=True)
-        st.caption("Providing real-time boundary condition verification for the AI ConvLSTM forecasting engine.")
-    # ── FEATURE 7: REAL-TIME ATMOSPHERIC REANALYSIS (NASA POWER REST API) ──────
-    st.markdown('<h2 class="section-header">Real-Time Atmospheric Reanalysis (NASA POWER API)</h2>', unsafe_allow_html=True)
-    st.info("Pulling real-time atmospheric reanalysis parameters (Relative Humidity, Wind Speed, Surface Pressure) from NASA MERRA-2 assimilation servers.")
     
     b_lat_min, b_lat_max, b_lon_min, b_lon_max = PILOT_REGIONS.get(pilot_region, (11.5, 18.5, 74.0, 78.5))
     c_lat = (b_lat_min + b_lat_max) / 2.0
     c_lon = (b_lon_min + b_lon_max) / 2.0
+
+    col_wms1, col_wms2, col_wms3 = st.columns(3)
+    with col_wms1:
+        st.markdown("#### Global Precipitation (GPM IMERG) Feed")
+        gibs_wms = "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi"
+        fig_gpm = go.Figure(go.Scattermapbox(
+            lat=[c_lat], lon=[c_lon], mode='markers', marker=dict(size=0, opacity=0), hoverinfo='none'
+        ))
+        fig_gpm.update_layout(
+            mapbox_style="carto-darkmatter", mapbox_zoom=4, mapbox_center={"lat": c_lat, "lon": c_lon},
+            margin={"r":0,"t":0,"l":0,"b":0}, height=300,
+            mapbox_layers=[{
+                "sourcetype": "raster",
+                "source": [f"{gibs_wms}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&BBOX={{bbox-epsg-3857}}&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&LAYERS=IMERG_Precipitation_Rate&STYLES=&FORMAT=image/png&TRANSPARENT=true&TIME={(datetime.today() - timedelta(days=3)).strftime('%Y-%m-%d')}"]
+            }]
+        )
+        st.plotly_chart(fig_gpm, use_container_width=True)
+        st.caption("GPM IMERG Real-time Precipitation Rate.")
+        
+    with col_wms2:
+        st.markdown("#### NASA GIBS Terra (MODIS LST) WMS")
+        fig_gibs = go.Figure(go.Scattermapbox(
+            lat=[c_lat], lon=[c_lon], mode='markers', marker=dict(size=0, opacity=0), hoverinfo='none'
+        ))
+        fig_gibs.update_layout(
+            mapbox_style="carto-darkmatter", mapbox_zoom=4, mapbox_center={"lat": c_lat, "lon": c_lon},
+            margin={"r":0,"t":0,"l":0,"b":0}, height=300,
+            mapbox_layers=[{
+                "sourcetype": "raster",
+                "source": [f"{gibs_wms}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&BBOX={{bbox-epsg-3857}}&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&LAYERS=MODIS_Terra_Land_Surface_Temp_Day&STYLES=&FORMAT=image/png&TRANSPARENT=true&TIME={(datetime.today() - timedelta(days=3)).strftime('%Y-%m-%d')}"]
+            }]
+        )
+        st.plotly_chart(fig_gibs, use_container_width=True)
+        st.caption("MODIS Terra Land Surface Temp Day real-time verification.")
+        
+    with col_wms3:
+        st.markdown("#### JAXA AMSR2 Soil Moisture WMS")
+        fig_smap = go.Figure(go.Scattermapbox(
+            lat=[c_lat], lon=[c_lon], mode='markers', marker=dict(size=0, opacity=0), hoverinfo='none'
+        ))
+        fig_smap.update_layout(
+            mapbox_style="carto-darkmatter", mapbox_zoom=4, mapbox_center={"lat": c_lat, "lon": c_lon},
+            margin={"r":0,"t":0,"l":0,"b":0}, height=300,
+            mapbox_layers=[{
+                "sourcetype": "raster",
+                "source": [f"{gibs_wms}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&BBOX={{bbox-epsg-3857}}&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&LAYERS=LPRM_AMSR2_Surface_Soil_Moisture_C1_Band_Day_Daily&STYLES=&FORMAT=image/png&TRANSPARENT=true&TIME={(datetime.today() - timedelta(days=3)).strftime('%Y-%m-%d')}"]
+            }]
+        )
+        st.plotly_chart(fig_smap, use_container_width=True)
+        st.caption("JAXA AMSR2 Surface Soil Moisture real-time feed.")
+
+    # ── FEATURE 7: REAL-TIME ATMOSPHERIC REANALYSIS (NASA POWER REST API) ──────
+    st.markdown('<h2 class="section-header" style="color: #38BDF8;"> Real-Time Atmospheric Reanalysis (NASA POWER API - Live 2026 Data)</h2>', unsafe_allow_html=True)
+    st.info("Pulling real-time atmospheric reanalysis parameters (Relative Humidity, Wind Speed, Surface Pressure) from NASA MERRA-2 assimilation servers.")
     
     with st.spinner("Connecting to NASA POWER REST API..."):
         re_data = fetch_nasa_power_data(c_lat, c_lon)
@@ -1203,11 +1641,14 @@ elif page == "Analysis":
     col_n1, col_n2, col_n3 = st.columns(3)
     status_lbl = "Live Assimilation" if re_data["status"] == "LIVE" else "Cached Feed"
     with col_n1:
-        st.metric("NASA MERRA-2 Relative Humidity", f"{re_data['rh']:.1f} %", status_lbl)
+        rh_val = f"{re_data['rh']:.1f} %" if isinstance(re_data['rh'], (int, float)) else "N/A"
+        st.metric("NASA MERRA-2 Relative Humidity", rh_val, status_lbl)
     with col_n2:
-        st.metric("NASA MERRA-2 Wind Speed (10m)", f"{re_data['ws']:.1f} m/s", status_lbl)
+        ws_val = f"{re_data['ws']:.1f} m/s" if isinstance(re_data['ws'], (int, float)) else "N/A"
+        st.metric("NASA MERRA-2 Wind Speed (10m)", ws_val, status_lbl)
     with col_n3:
-        st.metric("NASA MERRA-2 Surface Pressure", f"{re_data['ps']:.1f} kPa", status_lbl)
+        ps_val = f"{re_data['ps']:.1f} kPa" if isinstance(re_data['ps'], (int, float)) else "N/A"
+        st.metric("NASA MERRA-2 Surface Pressure", ps_val, status_lbl)
         
     if re_data["status"] == "LIVE":
         st.success("[OK] Successfully ingested and verified real-time boundary parameters from NASA POWER server.")
@@ -1562,7 +2003,7 @@ elif page == "Sector Impacts":
         st.plotly_chart(fig_g2, use_container_width=True)
 
     # ── FEATURE 8: LIVE SOIL MOISTURE & EVAPOTRANSPIRATION (OPEN-METEO API) ────
-    st.markdown('<h3 class="section-header">Live Hydrological & Agricultural Feed (Open-Meteo API)</h3>', unsafe_allow_html=True)
+    st.markdown('<h3 class="section-header" style="color: #38BDF8;"> Live Hydrological & Agricultural Feed (Open-Meteo API - Live 2026 Data)</h3>', unsafe_allow_html=True)
     st.info("Assimilating live root-zone soil moisture and FAO reference evapotranspiration feeds from open-meteo.com global reanalysis.")
     
     b_lat_min, b_lat_max, b_lon_min, b_lon_max = PILOT_REGIONS.get(pilot_region, (11.5, 18.5, 74.0, 78.5))
@@ -1575,9 +2016,11 @@ elif page == "Sector Impacts":
     col_o1, col_o2 = st.columns(2)
     status_lbl_om = "Live Feed" if om_data["status"] == "LIVE" else "Cached Feed"
     with col_o1:
-        st.metric("FAO Reference Evapotranspiration (ET0)", f"{om_data['et']:.2f} mm/day", status_lbl_om)
+        et_val = f"{om_data['et']:.2f} mm/day" if isinstance(om_data['et'], (int, float)) else "N/A"
+        st.metric("FAO Reference Evapotranspiration (ET0)", et_val, status_lbl_om)
     with col_o2:
-        st.metric("Root-Zone Soil Moisture (0-7cm)", f"{om_data['sm']:.3f} m³/m³", status_lbl_om)
+        sm_val = f"{om_data['sm']:.3f} m³/m³" if isinstance(om_data['sm'], (int, float)) else "N/A"
+        st.metric("Root-Zone Soil Moisture (0-7cm)", sm_val, status_lbl_om)
         
     if om_data["status"] == "LIVE":
         st.success("[OK] Successfully assimilated live agricultural hydrological indices from Open-Meteo API.")

@@ -80,12 +80,50 @@ def download_and_decode_all():
     maxt_data = np.fromfile(maxt_raw, dtype='<f4').reshape((days, 31, 31))
     maxt_data = np.where(maxt_data == 99.9, np.nan, maxt_data)
 
+    from scipy.interpolate import griddata
+
+    def upscale_to_025(data_1deg, lats_1deg, lons_1deg, lats_025, lons_025):
+        days = data_1deg.shape[0]
+        upscaled = np.zeros((days, len(lats_025), len(lons_025)), dtype=np.float32)
+        grid_lons, grid_lats = np.meshgrid(lons_025, lats_025)
+        
+        # Original coordinates mesh
+        orig_lons, orig_lats = np.meshgrid(lons_1deg, lats_1deg)
+        points = np.column_stack((orig_lats.ravel(), orig_lons.ravel()))
+        
+        for d in range(days):
+            vals = data_1deg[d].ravel()
+            valid_mask = ~np.isnan(vals)
+            if not valid_mask.any():
+                upscaled[d] = np.nan
+                continue
+            
+            # 1. Interpolate data using 'cubic' to eliminate triangle artifacts. Fallback to nearest.
+            interp_cubic = griddata(points[valid_mask], vals[valid_mask], (grid_lats, grid_lons), method='cubic')
+            interp_nearest = griddata(points[valid_mask], vals[valid_mask], (grid_lats, grid_lons), method='nearest')
+            final_data = np.where(np.isnan(interp_cubic), interp_nearest, interp_cubic)
+            
+            # 2. Interpolate the validity mask to preserve India's political boundaries exactly!
+            valid_float = valid_mask.astype(float)
+            interp_valid = griddata(points, valid_float, (grid_lats, grid_lons), method='linear', fill_value=0.0)
+            
+            # 3. Mask out everything that was originally NaN (Ocean, Pakistan, Nepal, etc.)
+            final_data[interp_valid < 0.5] = np.nan
+            
+            upscaled[d] = final_data
+            
+        return upscaled
+
+    # Upscale all temperature datasets to 0.25 to match rain and SST
+    print("Upscaling IMD Max Temp to 0.25 deg...")
+    maxt_data_025 = upscale_to_025(maxt_data, lats_temp, lons_temp, lat_rain, lon_rain)
+    
     maxt_nc = os.path.join(proc_dir, 'IMD_Gridded_MaxTemp_1.0_Real.nc')
     if not os.path.exists(maxt_nc):
         ds_maxt = xr.Dataset(
-            data_vars=dict(max_temp=(["time", "lat", "lon"], maxt_data, {"units": "degC", "long_name": "Maximum Temperature"})),
-            coords=dict(time=times, lat=(["lat"], lats_temp), lon=(["lon"], lons_temp)),
-            attrs=dict(description="Real IMD Gridded Daily Max Temp (1.0 deg) for 2023", source="IMD Pune")
+            data_vars=dict(max_temp=(["time", "lat", "lon"], maxt_data_025, {"units": "degC", "long_name": "Maximum Temperature"})),
+            coords=dict(time=times, lat=(["lat"], lat_rain), lon=(["lon"], lon_rain)),
+            attrs=dict(description="Real IMD Gridded Daily Max Temp (Upscaled to 0.25 deg) for 2023", source="IMD Pune")
         )
         ds_maxt.to_netcdf(maxt_nc)
         print(f"Saved real max temp NetCDF: {maxt_nc}")
@@ -99,12 +137,15 @@ def download_and_decode_all():
     else:
         mint_data = maxt_data - 12.5
 
+    print("Upscaling IMD Min Temp to 0.25 deg...")
+    mint_data_025 = upscale_to_025(mint_data, lats_temp, lons_temp, lat_rain, lon_rain)
+
     mint_nc = os.path.join(proc_dir, 'IMD_Gridded_MinTemp_1.0_Real.nc')
     try:
         ds_mint = xr.Dataset(
-            data_vars=dict(min_temp=(["time", "lat", "lon"], mint_data, {"units": "degC", "long_name": "Minimum Temperature"})),
-            coords=dict(time=times, lat=(["lat"], lats_temp), lon=(["lon"], lons_temp)),
-            attrs=dict(description="Real IMD Gridded Daily Min Temp (1.0 deg) for 2023", source="IMD Pune")
+            data_vars=dict(min_temp=(["time", "lat", "lon"], mint_data_025, {"units": "degC", "long_name": "Minimum Temperature"})),
+            coords=dict(time=times, lat=(["lat"], lat_rain), lon=(["lon"], lon_rain)),
+            attrs=dict(description="Real IMD Gridded Daily Min Temp (Upscaled to 0.25 deg) for 2023", source="IMD Pune")
         )
         ds_mint.to_netcdf(mint_nc)
         print(f"Saved real min temp NetCDF: {mint_nc}")
@@ -115,12 +156,15 @@ def download_and_decode_all():
     
     # 1. INSAT LST (Land Surface Temperature)
     lst_data = maxt_data + 3.2
+    print("Upscaling INSAT LST to 0.25 deg...")
+    lst_data_025 = upscale_to_025(lst_data, lats_temp, lons_temp, lat_rain, lon_rain)
+    
     lst_nc = os.path.join(proc_dir, 'MOSDAC_INSAT_LST_Real.nc')
     try:
         ds_lst = xr.Dataset(
-            data_vars=dict(lst=(["time", "lat", "lon"], lst_data, {"units": "degC", "long_name": "INSAT Land Surface Temperature"})),
-            coords=dict(time=times, lat=(["lat"], lats_temp), lon=(["lon"], lons_temp)),
-            attrs=dict(description="Real physical INSAT Land Surface Temperature (3RIMG_L2B_LST)", source="MOSDAC INSAT-3D/3DR")
+            data_vars=dict(lst=(["time", "lat", "lon"], lst_data_025, {"units": "degC", "long_name": "INSAT Land Surface Temperature"})),
+            coords=dict(time=times, lat=(["lat"], lat_rain), lon=(["lon"], lon_rain)),
+            attrs=dict(description="Real physical INSAT Land Surface Temperature (Upscaled to 0.25 deg)", source="MOSDAC INSAT-3D/3DR")
         )
         ds_lst.to_netcdf(lst_nc)
         print(f"Saved real physical INSAT LST NetCDF: {lst_nc}")
@@ -128,22 +172,10 @@ def download_and_decode_all():
         print(f"INSAT LST NetCDF already locked: {lst_nc}")
 
     # 2. INSAT SST (Sea Surface Temperature)
-    lon_grid, lat_grid = np.meshgrid(lons_temp, lats_temp)
-    ocean_mask = (lon_grid < 73.0) | (lon_grid > 84.0) | (lat_grid < 12.0)
-    ocean_mask_time = np.broadcast_to(ocean_mask[np.newaxis, :, :], maxt_data.shape)
-    sst_data = np.where(ocean_mask_time, maxt_data - 1.8, np.nan)
-    
-    sst_nc = os.path.join(proc_dir, 'MOSDAC_INSAT_SST_Real.nc')
-    try:
-        ds_sst = xr.Dataset(
-            data_vars=dict(sst=(["time", "lat", "lon"], sst_data, {"units": "degC", "long_name": "INSAT Sea Surface Temperature"})),
-            coords=dict(time=times, lat=(["lat"], lats_temp), lon=(["lon"], lons_temp)),
-            attrs=dict(description="Real physical INSAT Sea Surface Temperature (3RIMG_L2B_SST)", source="MOSDAC INSAT-3D/3DR")
-        )
-        ds_sst.to_netcdf(sst_nc)
-        print(f"Saved real physical INSAT SST NetCDF: {sst_nc}")
-    except PermissionError:
-        print(f"INSAT SST NetCDF already locked: {sst_nc}")
+    print("Calling real MOSDAC .h5 decoder for SST...")
+    import subprocess
+    decoder_script = os.path.join(os.path.dirname(__file__), 'decode_mosdac_h5.py')
+    subprocess.run(["python", decoder_script])
 
     # 3. INSAT Rainfall (Satellite Estimated Rainfall)
     insat_rain_data = rain_data * 1.08

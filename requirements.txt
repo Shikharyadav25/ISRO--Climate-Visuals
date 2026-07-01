@@ -1,4 +1,4 @@
-tensorflow==2.21.0
+tensorflow>=2.15.0
 streamlit==1.58.0
 pandas>=2.2.0
 numpy>=1.26.0
@@ -18,3 +18,4 @@ netCDF4>=1.6.5
 fastapi>=0.111.0
 uvicorn>=0.30.0
 pydantic>=2.7.0
+global-land-mask>=1.0.0

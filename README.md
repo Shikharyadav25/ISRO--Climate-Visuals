@@ -89,7 +89,7 @@ model = SpatioTemporalConvLSTM(input_dim=1, hidden_dim=[64, 32], kernel_size=(3,
 
 ---
 
-## ️ Multi-Source Data Assimilation (IMD + MOSDAC INSAT)
+##  Multi-Source Data Assimilation (IMD + MOSDAC INSAT)
 
 The framework seamlessly assimilates the required national datasets:
 
@@ -118,40 +118,87 @@ To scale this Proof of Concept (PoC) from the **Karnataka Pilot Region** to a hi
 
 ---
 
+##  Advanced Capabilities & Decision Support
+
+Beyond raw prediction grids, the Digital Twin includes advanced modules designed to convert data into actionable intelligence for disaster management and agricultural planning.
+
+###  Automated Climate Alerts Engine
+* **Source:** `src/climate_alerts.py`
+* **Function:** A built-in extreme weather warning system that continuously monitors the AI's predictive grids against official **India Meteorological Department (IMD)** thresholds.
+* **Capabilities:** Automatically triggers RED, ORANGE, and YELLOW alerts for:
+  * **Severe Heatwaves:** Detects when plains exceed 45°C or coastal regions exceed 37°C.
+  * **Heavy Rainfall & Flooding:** Flags extreme precipitation events (e.g., >204.5 mm/day) providing crucial lead time for reservoir management.
+  * **Dry Spells:** Detects prolonged rainfall deficits to warn of impending agricultural droughts.
+
+###  AI Climate Copilot (RAG Engine)
+* **Source:** `src/climate_copilot.py`
+* **Function:** A localized Retrieval-Augmented Generation (RAG) assistant serving as a virtual agricultural advisor.
+* **Capabilities:** Cross-references the live regional climate state (e.g., current temperature and rainfall averages) against official **ICAR-CRIDA Agricultural Contingency Plans** and **NDMA guidelines**. It provides instant, grounded advice such as crop substitution strategies (e.g., switching to millets during dry spells) or foliar spray recommendations during heat stress.
+
+###  Automated Live Data Synchronization
+* **Source:** `scripts/sync_live_imd.py` & `scripts/download_insat_live.py`
+* **Function:** The system is not static. Upon dashboard initialization, background orchestration scripts automatically reach out to IMD and MOSDAC APIs to synchronize the latest ground truth and satellite observations, ensuring the Digital Twin is perpetually up-to-date.
+
+---
+
 ##  Quick Start Guide
 
-### 1. Environment Setup
+### 1. Clone the Repository
 ```bash
+git clone https://github.com/Shikharyadav25/ISRO--Climate-Visuals.git
+cd ISRO--Climate-Visuals
+```
+
+### 2. Environment Setup
+Create and activate an isolated Python environment to avoid dependency conflicts:
+```bash
+# Windows
 python -m venv venv
-# Windows Activation:
 venv\Scripts\activate
-# Mac/Linux Activation:
+
+# Mac/Linux
+python3 -m venv venv
 source venv/bin/activate
 
+# Install all required dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Run Automated Integration & Architecture Tests
-```bash
-# Test data loading and pipeline integrity
-python tests/test_integration.py
+### 3. Choose Your Execution Path
 
-# Verify PyTorch ConvLSTM Spatio-Temporal network initialization
-python src/models/pytorch_convlstm.py
+**Option A: Fast Track (Out-of-the-Box)**
+The repository comes pre-loaded with the processed NetCDF climate grids and the fully-trained PyTorch model weights (`.pth`). You can skip data processing and jump straight to **Step 4** to launch the dashboard instantly!
+
+**Option B: Train from Scratch (Full Pipeline)**
+If you wish to replicate the entire data engineering and deep learning pipeline from zero:
+```bash
+# 1. Download IMD/MOSDAC binary data and decode into clean NetCDF4 (.nc) files
+python scripts/download_and_decode_all_real.py
+
+# 2. Train the Spatio-Temporal ConvLSTM on the newly generated grids
+python scripts/train_convlstm.py
 ```
 
-### 3. Launch the Digital Twin Dashboard & API Backend
+### 4. Run Automated Tests
+Verify that the pipeline integrity and PyTorch network initialization are perfectly stable:
+```bash
+python tests/test_integration.py
+```
 
-Launch the FastAPI background service (used for spatial API calls):
+### 5. Launch the Digital Twin!
+The Digital Twin uses a dual-service architecture. Open **two separate terminal windows** (ensure your `venv` is activated in both).
+
+**Terminal 1 (Backend API):**
 ```bash
 uvicorn src.api.main:app --reload --port 8000
 ```
 
-Launch the Streamlit web dashboard:
+**Terminal 2 (Frontend Dashboard):**
 ```bash
 streamlit run app/streamlit_app.py
 ```
-*Open your browser to `http://localhost:8501` to explore the interactive digital twin dashboard, and `http://localhost:8000/docs` to view the interactive API swagger documentation.*
+
+*Open your browser to `http://localhost:8501` to explore the interactive digital twin dashboard. The `sync_live_imd.py` script will automatically execute in the background to fetch the latest real-time observations!*
 
 ---
 
