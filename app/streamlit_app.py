@@ -9,6 +9,7 @@ import sys
 import os
 import xarray as xr
 import importlib
+import pydeck as pdk
 
 # -----------------------------------------------------------------------------
 # AUTOMATED DATA INGESTION HOOK
@@ -43,6 +44,7 @@ from src.model_loader import ModelLoader
 from src.spatial_predictions import SpatialClimatePredictor, PILOT_REGIONS, STATE_POLYGONS
 from src.climate_alerts import ClimateAlertEngine
 from src.climate_copilot import ClimateCopilotEngine
+from src.dwr_radar_engine import DopplerRadarEngine
 
 # Page config
 st.set_page_config(
@@ -373,6 +375,10 @@ def load_alert_engine_v3():
 def load_copilot_engine():
     return ClimateCopilotEngine()
 
+@st.cache_resource
+def load_radar_engine():
+    return DopplerRadarEngine()
+
 def mask_region_boundary_local(data_array, region_name):
     from src.spatial_predictions import STATE_PATHS
     if data_array is None or region_name not in STATE_PATHS:
@@ -480,6 +486,7 @@ def load_gridded_data():
 predictor = load_spatial_predictor_v4()
 alert_engine = load_alert_engine_v3()
 copilot = load_copilot_engine()
+radar_engine = load_radar_engine()
 ds_rain, ds_temp, ds_mint, ds_lst, ds_sst, ds_insat_rain = load_gridded_data()
 
 # Compute Simulated NICES Soil Moisture
@@ -519,17 +526,33 @@ with st.sidebar:
     st.header("Visual Aesthetics")
     map_style = st.radio(
         "Map Rendering Mode:",
-        ["High-Resolution Pixel Grid (Lossless)", "Smooth Gradient Overlay (Premium)"]
+        ["WebGL 3D Engine (PyDeck)", "High-Resolution Pixel Grid (Lossless)", "Smooth Gradient Overlay (Premium)"]
     )
     
     st.markdown("---")
     st.header("Multi-Variable Overlays")
     overlay_wind = st.checkbox("Overlay Geostrophic Wind Vectors", value=False, help="Simulates physical wind flow using 90° rotated spatial temperature/pressure gradients.")
+    if "WebGL" in map_style:
+        extrusion = st.checkbox("Enable 3D Elevation / Extrusion", value=True)
+    
+    st.header("Nowcasting")
+    enable_radar = st.checkbox("Live Doppler Weather Radar (10-min)", value=False)
+    if enable_radar:
+        radar_station = st.selectbox("Select Radar Station:", list(radar_engine.radars.keys()))
 
 # placeholder — header rendered after data is computed
 
 if ds_rain is None:
     st.stop()
+
+def render_map(fig, use_container_width=True, on_select=None):
+    if isinstance(fig, pdk.Deck):
+        return st.pydeck_chart(fig, use_container_width=use_container_width)
+    else:
+        if on_select:
+            return st.plotly_chart(fig, use_container_width=use_container_width, on_select=on_select)
+        else:
+            return st.plotly_chart(fig, use_container_width=use_container_width)
 
 # Helper to plot true geospatial Mapbox map
 def plot_spatial_map(data_array, title, colorscale, val_name="Value", zmin=None, zmax=None, plot_wind=False):
@@ -554,7 +577,78 @@ def plot_spatial_map(data_array, title, colorscale, val_name="Value", zmin=None,
         zoom = 5.0
 
     is_rain = "Rain" in val_name or "rain" in val_col
-    if "Smooth" in map_style and is_rain:
+    if "WebGL" in map_style:
+        import matplotlib as mpl
+        cmap_name = colorscale if isinstance(colorscale, str) else 'turbo'
+        if cmap_name in mpl.colormaps: cmap = mpl.colormaps[cmap_name]
+        elif cmap_name.lower() in mpl.colormaps: cmap = mpl.colormaps[cmap_name.lower()]
+        else: cmap = mpl.colormaps['turbo']
+        
+        vmin = zmin if zmin is not None else df[val_col].min()
+        vmax = zmax if zmax is not None else df[val_col].max()
+        if vmin == vmax: vmax += 1e-5
+        
+        def get_color(val):
+            if pd.isna(val): return [0, 0, 0, 0]
+            norm_val = max(0.0, min(1.0, (val - vmin) / (vmax - vmin)))
+            r, g, b, a = cmap(norm_val)
+            return [int(r*255), int(g*255), int(b*255), 200]
+            
+        df['color'] = df[val_col].apply(get_color)
+        is_extrusion = extrusion if 'extrusion' in globals() or 'extrusion' in locals() else False
+        
+        if is_extrusion:
+            df['elevation'] = np.clip((df[val_col] - vmin) / (vmax - vmin), 0, 1) * 60000
+            layer = pdk.Layer(
+                "ColumnLayer",
+                data=df,
+                get_position=["lon", "lat"],
+                get_elevation="elevation",
+                elevation_scale=1,
+                radius=12000 if pilot_region == "All India" else 4000,
+                get_fill_color="color",
+                pickable=True,
+                auto_highlight=True,
+            )
+            pitch = 45
+        else:
+            layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=df,
+                get_position=["lon", "lat"],
+                get_fill_color="color",
+                get_radius=15000 if pilot_region == "All India" else 5000,
+                pickable=True,
+            )
+            pitch = 0
+            
+        layers = [layer]
+        
+        is_radar = enable_radar if 'enable_radar' in globals() or 'enable_radar' in locals() else False
+        if is_radar:
+            r_station = radar_station if 'radar_station' in globals() or 'radar_station' in locals() else "Delhi"
+            radar_data = radar_engine.get_latest_radar(r_station)
+            if radar_data:
+                import base64
+                with open(radar_data["image_path"], "rb") as img_file:
+                    b64_img = base64.b64encode(img_file.read()).decode()
+                bbox = radar_data["bbox"] # [min_lon, min_lat, max_lon, max_lat]
+                # PyDeck BitmapLayer bounds: [left, bottom, right, top]
+                bounds = [bbox[0], bbox[1], bbox[2], bbox[3]]
+                radar_layer = pdk.Layer(
+                    "BitmapLayer",
+                    image=f"data:image/gif;base64,{b64_img}",
+                    bounds=bounds,
+                    opacity=0.6,
+                    transparentColor=[0, 0, 0, 0]
+                )
+                layers.append(radar_layer)
+                
+        view_state = pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=zoom, pitch=pitch)
+        fig = pdk.Deck(layers=layers, initial_view_state=view_state, map_style="mapbox://styles/mapbox/dark-v10", tooltip={"text": f"{val_name}: {{{val_col}}}"})
+        return fig
+        
+    elif "Smooth" in map_style and is_rain:
         if pilot_region == "All India":
             radius = 12
         else:
@@ -909,32 +1003,32 @@ if page == "Dashboard":
         with tab_sm:
             if ds_sm is not None:
                 curr_sm = predictor.slice_region(ds_sm, pilot_region)
-                event_sm = st.plotly_chart(plot_spatial_map(curr_sm, f"NICES Soil Moisture Proxy ({pilot_region})", "BrBG", val_name="Moisture (%)", plot_wind=overlay_wind), use_container_width=True, on_select="rerun")
+                event_sm = render_map(plot_spatial_map(curr_sm, f"NICES Soil Moisture Proxy ({pilot_region})", "BrBG", val_name="Moisture (%)", plot_wind=overlay_wind), use_container_width=True, on_select="rerun")
             else:
                 st.warning("Soil Moisture data not available.")
         
         with tab_rain:
-            event_rain = st.plotly_chart(plot_spatial_map(curr_rain, f"IMD Gridded Rainfall ({pilot_region})", "Blues", val_name="Rain (mm)", plot_wind=overlay_wind), use_container_width=True, on_select="rerun")
+            event_rain = render_map(plot_spatial_map(curr_rain, f"IMD Gridded Rainfall ({pilot_region})", "Blues", val_name="Rain (mm)", plot_wind=overlay_wind), use_container_width=True, on_select="rerun")
         with tab_maxt:
-            event_maxt = st.plotly_chart(plot_spatial_map(curr_temp, f"IMD Gridded Max Temp ({pilot_region})", "YlOrRd", val_name="Max Temp (°C)", plot_wind=overlay_wind), use_container_width=True, on_select="rerun")
+            event_maxt = render_map(plot_spatial_map(curr_temp, f"IMD Gridded Max Temp ({pilot_region})", "YlOrRd", val_name="Max Temp (°C)", plot_wind=overlay_wind), use_container_width=True, on_select="rerun")
         with tab_mint:
             if curr_mint is not None:
-                event_mint = st.plotly_chart(plot_spatial_map(curr_mint, f"IMD Gridded Min Temp ({pilot_region})", "Viridis", val_name="Min Temp (°C)", plot_wind=overlay_wind), use_container_width=True, on_select="rerun")
+                event_mint = render_map(plot_spatial_map(curr_mint, f"IMD Gridded Min Temp ({pilot_region})", "Viridis", val_name="Min Temp (°C)", plot_wind=overlay_wind), use_container_width=True, on_select="rerun")
             else:
                 st.warning("Minimum Temperature data not available for this date.")
         with tab_lst:
             if curr_lst is not None:
-                event_lst = st.plotly_chart(plot_spatial_map(curr_lst, f"MOSDAC INSAT LST ({pilot_region})", "Magma", val_name="LST (°C)"), use_container_width=True, on_select="rerun")
+                event_lst = render_map(plot_spatial_map(curr_lst, f"MOSDAC INSAT LST ({pilot_region})", "Magma", val_name="LST (°C)"), use_container_width=True, on_select="rerun")
             else:
                 st.warning("LST data not available for this date.")
         with tab_sst:
             if curr_sst is not None:
-                event_sst = st.plotly_chart(plot_spatial_map(curr_sst, f"MOSDAC INSAT SST ({pilot_region})", "Jet", val_name="SST (°C)"), use_container_width=True, on_select="rerun")
+                event_sst = render_map(plot_spatial_map(curr_sst, f"MOSDAC INSAT SST ({pilot_region})", "Jet", val_name="SST (°C)"), use_container_width=True, on_select="rerun")
             else:
                 st.warning("SST data not available for this date.")
         with tab_insat_rain:
             if curr_insat_rain is not None:
-                event_insat_rain = st.plotly_chart(plot_spatial_map(curr_insat_rain, f"MOSDAC INSAT Rainfall ({pilot_region})", "Teal", val_name="Rain (mm)"), use_container_width=True, on_select="rerun")
+                event_insat_rain = render_map(plot_spatial_map(curr_insat_rain, f"MOSDAC INSAT Rainfall ({pilot_region})", "Teal", val_name="Rain (mm)"), use_container_width=True, on_select="rerun")
             else:
                 st.warning("INSAT Rainfall data not available for this date.")
         with tab_fused:
@@ -944,7 +1038,7 @@ if page == "Dashboard":
                     try:
                         insat_interp = curr_insat_rain.interp_like(curr_rain, method="nearest")
                         fused_rain = predictor.assimilate_multi_source_data(curr_rain, insat_interp, variable="rainfall")
-                        event_fused = st.plotly_chart(plot_spatial_map(fused_rain, f"Assimilated Fused Rainfall ({pilot_region})", "Blues", val_name="Rain (mm)"), use_container_width=True, on_select="rerun")
+                        event_fused = render_map(plot_spatial_map(fused_rain, f"Assimilated Fused Rainfall ({pilot_region})", "Blues", val_name="Rain (mm)"), use_container_width=True, on_select="rerun")
                     except Exception as e:
                         st.warning(f"Data assimilation failed: {e}")
                 else:
@@ -954,7 +1048,7 @@ if page == "Dashboard":
                     try:
                         lst_interp = curr_lst.interp_like(curr_temp, method="nearest")
                         fused_temp = predictor.assimilate_multi_source_data(curr_temp, lst_interp, variable="temperature")
-                        event_fused = st.plotly_chart(plot_spatial_map(fused_temp, f"Assimilated Fused Temperature ({pilot_region})", "YlOrRd", val_name="Temp (°C)"), use_container_width=True, on_select="rerun")
+                        event_fused = render_map(plot_spatial_map(fused_temp, f"Assimilated Fused Temperature ({pilot_region})", "YlOrRd", val_name="Temp (°C)"), use_container_width=True, on_select="rerun")
                     except Exception as e:
                         st.warning(f"Data assimilation failed: {e}")
                 else:
@@ -976,14 +1070,21 @@ if page == "Dashboard":
         if 'prev_sm_pt' not in st.session_state: st.session_state['prev_sm_pt'] = None
         if 'active_drill_map' not in st.session_state: st.session_state['active_drill_map'] = None
         
-        curr_rain_pt = event_rain.selection["points"][0] if ('event_rain' in locals() and event_rain and event_rain.selection.get("points")) else None
-        curr_maxt_pt = event_maxt.selection["points"][0] if ('event_maxt' in locals() and event_maxt and event_maxt.selection.get("points")) else None
-        curr_mint_pt = event_mint.selection["points"][0] if ('event_mint' in locals() and event_mint and event_mint.selection.get("points")) else None
-        curr_lst_pt = event_lst.selection["points"][0] if ('event_lst' in locals() and event_lst and event_lst.selection.get("points")) else None
-        curr_sst_pt = event_sst.selection["points"][0] if ('event_sst' in locals() and event_sst and event_sst.selection.get("points")) else None
-        curr_insat_rain_pt = event_insat_rain.selection["points"][0] if ('event_insat_rain' in locals() and event_insat_rain and event_insat_rain.selection.get("points")) else None
-        curr_fused_pt = event_fused.selection["points"][0] if ('event_fused' in locals() and event_fused and event_fused.selection.get("points")) else None
-        curr_sm_pt = event_sm.selection["points"][0] if ('event_sm' in locals() and event_sm and event_sm.selection.get("points")) else None
+        def get_point(evt):
+            if evt and hasattr(evt, 'selection') and isinstance(evt.selection, dict):
+                points = evt.selection.get("points")
+                if points and len(points) > 0:
+                    return points[0]
+            return None
+
+        curr_rain_pt = get_point(event_rain) if 'event_rain' in locals() else None
+        curr_maxt_pt = get_point(event_maxt) if 'event_maxt' in locals() else None
+        curr_mint_pt = get_point(event_mint) if 'event_mint' in locals() else None
+        curr_lst_pt = get_point(event_lst) if 'event_lst' in locals() else None
+        curr_sst_pt = get_point(event_sst) if 'event_sst' in locals() else None
+        curr_insat_rain_pt = get_point(event_insat_rain) if 'event_insat_rain' in locals() else None
+        curr_fused_pt = get_point(event_fused) if 'event_fused' in locals() else None
+        curr_sm_pt = get_point(event_sm) if 'event_sm' in locals() else None
         
         if curr_rain_pt != st.session_state['prev_rain_pt']:
             st.session_state['active_drill_map'] = 'rain' if curr_rain_pt else None
@@ -1277,9 +1378,9 @@ elif page == "Spatial Predictions":
         final_day_unc = xr.DataArray(uncertainty_grid, coords=[base_grid.lat, base_grid.lon], dims=["lat", "lon"], name="unc_var")
         
         with col_m1:
-            event = st.plotly_chart(plot_spatial_map(final_day_pred, f"Predicted Mean {variable_sel} (Day +{pred_days})", c_scale, val_name=val_lbl), use_container_width=True, on_select="rerun")
+            event = render_map(plot_spatial_map(final_day_pred, f"Predicted Mean {variable_sel} (Day +{pred_days})", c_scale, val_name=val_lbl), use_container_width=True, on_select="rerun")
         with col_m2:
-            st.plotly_chart(plot_spatial_map(final_day_unc, f"Prediction Uncertainty (±1σ Standard Deviation)", "Purples", val_name="Std Dev"), use_container_width=True)
+            render_map(plot_spatial_map(final_day_unc, f"Prediction Uncertainty (±1σ Standard Deviation)", "Purples", val_name="Std Dev"), use_container_width=True)
         
         # Plot 3: Point-Click Temporal Forecast (Drill-Down)
         st.markdown('<h3 class="section-header">Point Coordinate Temporal Forecast</h3>', unsafe_allow_html=True)
@@ -1434,9 +1535,9 @@ elif page == "What-If Simulation":
                 "Modified Spatial Max Temp"
             ])
             with tab_what_rain:
-                st.plotly_chart(plot_spatial_map(mod_rain_da, "Modified Spatial Rainfall Distribution", "Blues", val_name="Rain (mm)"), use_container_width=True)
+                render_map(plot_spatial_map(mod_rain_da, "Modified Spatial Rainfall Distribution", "Blues", val_name="Rain (mm)"), use_container_width=True)
             with tab_what_temp:
-                st.plotly_chart(plot_spatial_map(mod_temp_da, "Modified Spatial Max Temp Distribution", "YlOrRd", val_name="Max Temp (°C)"), use_container_width=True)
+                render_map(plot_spatial_map(mod_temp_da, "Modified Spatial Max Temp Distribution", "YlOrRd", val_name="Max Temp (°C)"), use_container_width=True)
             
             avg_rain_change = float(mod_rain_da.mean() - latest_rain.mean())
             avg_temp_change = float(mod_temp_da.mean() - latest_temp.mean())
@@ -1506,18 +1607,18 @@ elif page == "Analysis":
         col_da1, col_da2, col_da3 = st.columns(3)
         with col_da1:
             st.markdown("##### IMD Ground Max Temp (1.0°)")
-            st.plotly_chart(plot_spatial_map(latest_temp, "IMD Ground Max Temp (1.0°)", "YlOrRd", val_name="Temp (°C)", zmin=20, zmax=45), use_container_width=True)
+            render_map(plot_spatial_map(latest_temp, "IMD Ground Max Temp (1.0°)", "YlOrRd", val_name="Temp (°C)", zmin=20, zmax=45), use_container_width=True)
         with col_da2:
             st.markdown("##### MOSDAC INSAT LST (1.0°)")
-            st.plotly_chart(plot_spatial_map(latest_lst, "MOSDAC INSAT LST (1.0°)", "YlOrRd", val_name="LST (°C)", zmin=20, zmax=45), use_container_width=True)
+            render_map(plot_spatial_map(latest_lst, "MOSDAC INSAT LST (1.0°)", "YlOrRd", val_name="LST (°C)", zmin=20, zmax=45), use_container_width=True)
         with col_da3:
             st.markdown("##### Fused Grid (Optimal Interpolated)")
-            st.plotly_chart(plot_spatial_map(fused_temp, "Fused High-Fidelity Temperature", "YlOrRd", val_name="Fused Temp (°C)", zmin=20, zmax=45), use_container_width=True)
+            render_map(plot_spatial_map(fused_temp, "Fused High-Fidelity Temperature", "YlOrRd", val_name="Fused Temp (°C)", zmin=20, zmax=45), use_container_width=True)
     else:
         col_da1, col_da2 = st.columns(2)
         with col_da1:
             st.markdown("##### IMD Ground Max Temp (1.0°)")
-            st.plotly_chart(plot_spatial_map(latest_temp, "IMD Ground Max Temp (1.0°)", "YlOrRd", val_name="Temp (°C)", zmin=20, zmax=45), use_container_width=True)
+            render_map(plot_spatial_map(latest_temp, "IMD Ground Max Temp (1.0°)", "YlOrRd", val_name="Temp (°C)", zmin=20, zmax=45), use_container_width=True)
         with col_da2:
             st.markdown("##### MOSDAC INSAT LST Status")
             st.warning("MOSDAC INSAT LST dataset not found or locked.")
@@ -1531,12 +1632,12 @@ elif page == "Analysis":
     ])
     with tab_insat_sst:
         if reg_sst is not None:
-            st.plotly_chart(plot_spatial_map(reg_sst.sst.isel(time=-1), "MOSDAC INSAT SST", "Viridis", val_name="SST (°C)"), use_container_width=True)
+            render_map(plot_spatial_map(reg_sst.sst.isel(time=-1), "MOSDAC INSAT SST", "Viridis", val_name="SST (°C)"), use_container_width=True)
         else:
             st.info("INSAT Sea Surface Temperature (SST) dataset unavailable.")
     with tab_insat_rain:
         if reg_insat_rain is not None:
-            st.plotly_chart(plot_spatial_map(reg_insat_rain.rain.isel(time=-1), "MOSDAC INSAT Rainfall", "Blues", val_name="Rain (mm)"), use_container_width=True)
+            render_map(plot_spatial_map(reg_insat_rain.rain.isel(time=-1), "MOSDAC INSAT Rainfall", "Blues", val_name="Rain (mm)"), use_container_width=True)
         else:
             st.info("INSAT Satellite Rainfall dataset unavailable.")
 

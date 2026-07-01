@@ -54,5 +54,12 @@ def download_insat_data():
         print("--- Errors ---")
         print(result.stderr)
         
+    print("\n--- Triggering Autonomous HDF5 Decoding Pipeline ---")
+    try:
+        import decode_mosdac_h5
+        decode_mosdac_h5.decode_and_regrid_sst()
+    except Exception as e:
+        print(f"Decoding pipeline failed: {e}")
+        
 if __name__ == "__main__":
     download_insat_data()

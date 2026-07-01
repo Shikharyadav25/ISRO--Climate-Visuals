@@ -29,6 +29,18 @@ jobs:
       - name: Sync Live IMD Data
         run: python scripts/sync_live_imd.py
 
+      - name: Configure MOSDAC API Secrets
+        run: |
+          cat <<EOF > config.json
+          {
+            "mosdac_username": "${{ secrets.MOSDAC_USERNAME }}",
+            "mosdac_password": "${{ secrets.MOSDAC_PASSWORD }}"
+          }
+          EOF
+
+      - name: Sync and Decode Live MOSDAC HDF5 Data
+        run: python scripts/download_insat_live.py
+
       - name: Commit and Push Changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
