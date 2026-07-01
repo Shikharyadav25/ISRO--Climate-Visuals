@@ -21,6 +21,6 @@ venv312/
 config.json
 
 # Large Datasets & Model Weights
-data/raw/
-data/processed/**/*.nc
-checkpoints/
+# data/raw/
+# data/processed/**/*.nc
+# checkpoints/
