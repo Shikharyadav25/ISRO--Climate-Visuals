@@ -123,12 +123,20 @@ The engine (`src/climate_indices.py`) evaluates real-time data to derive high-le
 
 ### 3. NWS Flash Flood Guidance (FFG)
 * Estimates the volume of rainfall (mm/day) required to initiate local flooding.
-* Calculates soil capacity limits by evaluating observed precipitation accumulations relative to the active soil moisture saturation percentage ($SM_{\%}$):
-  $$\text{FFG} = \text{Capacity}_{\text{max}} \cdot (1.0 - SM_{\%})$$
+* Calculates soil capacity limits by evaluating observed precipitation accumulations relative to the active soil moisture saturation percentage ($SM_{\text{pct}}$):
+  $$\text{FFG} = \text{Capacity}_{\text{max}} \cdot (1.0 - SM_{\text{pct}})$$
 
 ### 4. Monsoon Onset and Northward Advance Tracker
 * Evaluates waypoints using the IMD criteria: at least 5 consecutive days where the spatial mean daily rainfall over the waypoint exceeds $2.5\text{ mm/day}$, commencing after the earliest historical onset window.
 * **Target Year Slicing:** Dynamically filters dataset records to the chosen target year. If the selection exceeds the dataset range (e.g. 2026), it falls back to the latest year of available observations (`2023`), updating all cards and headers dynamically.
+
+### 5. IMD Meteorological Alert Thresholds
+Monitors predicted grids against official India Meteorological Department thresholds to trigger warnings:
+* **Severe Heatwave:** Triggered when the maximum temperature grid point exceeds $40^\circ\text{C}$ in plains or $37^\circ\text{C}$ in coastal areas, or when the positive temperature anomaly departs by $\ge 4.5^\circ\text{C}$ above climatology.
+* **Heavy Rainfall:** Triggered based on daily accumulation thresholds:
+  * **Yellow Warning (Heavy):** Precipitation rate between $64.5\text{ mm}$ and $115.5\text{ mm}$ per day.
+  * **Orange Warning (Very Heavy):** Precipitation rate between $115.6\text{ mm}$ and $204.4\text{ mm}$ per day.
+  * **Red Warning (Extremely Heavy):** Precipitation rate exceeding $204.5\text{ mm}$ per day.
 
 ---
 
@@ -139,6 +147,15 @@ The GIS layer integrates real-time satellite data using the Web Map Service (WMS
 * **Execution:** Resolves map layer views dynamically inside Plotly `Scattermap` maps. The client browser issues a standard `GetMap` query to fetch raster tiles projected under EPSG:3857 coordinate systems:
   `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&BBOX={bbox-epsg-3857}&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&LAYERS=LPRM_AMSR2_Surface_Soil_Moisture_C1_Band_Day_Daily&STYLES=&FORMAT=image/png&TRANSPARENT=true`
 * The Soil Moisture layer is automatically requested without rigid static date parameters, allowing the WMS server to default to the latest available daily satellite composite.
+
+---
+
+## FastAPI REST API Gateway Specification
+
+The microservice architecture exposes predictions and geodata endpoints:
+* **GET `/api/status`**: Returns the current dataset assimilation timestamp and scale factors.
+* **GET `/api/predictions/rainfall`**: Returns a float array containing the 7-day spatial rainfall predictions for the active region.
+* **GET `/api/predictions/temperature`**: Returns the maximum and minimum temperature forecasts.
 
 ---
 
@@ -157,6 +174,14 @@ Evaluates the accuracy of probabilistic heavy rainfall forecasts ($>35\text{ mm/
 
 ### 2. Reliability Calibration Curves
 Plots forecasted probabilities against observed frequencies across 10 bins. A perfectly calibrated model aligns along the $y=x$ diagonal line, revealing prediction biases (e.g., over-forecasting or under-forecasting).
+
+### 3. Spatial Resolution Mapping and Grid Alignment
+To resolve mathematical errors when computing verification statistics between grids of different coordinate shapes:
+* Ground-based rainfall data operates on a $0.25^\circ$ spacing (yielding $129 \times 135$ grids).
+* Temperature observations are formatted on a $1.0^\circ$ spacing (yielding $31 \times 31$ grids).
+* **Grid Slicing Alignments:** The validation engine dynamically resolves sub-slices by mapping matching latitude and longitude index boundaries:
+  $$\text{Index}_{\text{start}} = \text{argmin}(|\text{Coords}_{\text{all}} - \text{Coords}_{\text{target}}|)$$
+  This ensures target holdout validation grids and forecast arrays match dimensions exactly, preventing shape broadcasting crashes during metric computations.
 
 ---
 
