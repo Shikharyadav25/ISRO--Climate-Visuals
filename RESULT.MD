@@ -1,6 +1,8 @@
 # Project Results and Findings
 ## India Climate Digital Twin Validation Analysis
 
+![Model Verification and Validation Dashboard](assets/validation_performance.png)
+
 ---
 
 ## Model Performance and Validation (2022-2023 Holdout)

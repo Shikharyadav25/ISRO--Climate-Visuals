@@ -1,6 +1,20 @@
 # India Climate Digital Twin: 2D Spatiotemporal Geospatial Reanalysis and Prognostic Forecasting Platform
 
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://streamlit.io/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=PyTorch&logoColor=white)](https://pytorch.org/)
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+
+![India Climate Digital Twin System Infographic](assets/digital_twin_workflow.png)
+
 This repository houses the 2D Geospatial Reanalysis and Prognostic Forecasting Platform developed for ISRO Problem Statement 5. The platform assimilates space-based remote sensing datasets from geostationary satellites (MOSDAC INSAT-3D/3DR) and ground-based observations (India Meteorological Department - IMD Pune) to model atmospheric and land-surface processes at high spatial and temporal resolutions.
+
+---
+
+## Project Presentation and Walkthrough Resources
+
+* **Video Walkthrough:** [Video Demonstration Link](https://drive.google.com/file/d/1yHdSgdgNW5dvYL6ls5tCmkujt1F5GsA3/view?usp=drive_link)
+* **Presentation Slides:** [PDF Slide Deck Link](https://drive.google.com/file/d/1cEVEjVDCai2UmEGtx6d26ieoh_Wcka_A/view?usp=sharing)
 
 ---
 
@@ -8,36 +22,63 @@ This repository houses the 2D Geospatial Reanalysis and Prognostic Forecasting P
 
 The system is split into three core layers: a data engineering and decoding pipeline, a hybrid deep-learning-statistical forecasting engine, and an interactive GIS dashboard.
 
-```text
-+-----------------------------------------------------------------------------------+
-|                                  DATA INGESTION                                   |
-|   IMD Binary Daily Grids (.grd)   |   MOSDAC INSAT-3D/3DR H5   |   WMS API Feeds   |
-+-----------------------------------------------------------------------------------+
-                                          |
-                                          v
-+-----------------------------------------------------------------------------------+
-|                                DATA PROCESSING                                    |
-|   CF-Compliant NetCDF4 (.nc) Compilation  |  Vector administrative masking (GeoJSON) |
-+-----------------------------------------------------------------------------------+
-                                          |
-                                          v
-+-----------------------------------------------------------------------------------+
-|                            FORECASTING & ANALYSIS ENGINE                          |
-|  PyTorch ConvLSTM Anomaly  |  NOAA CPC Spatial Analogs  |  WMO SPI / CWSI / FFG    |
-+-----------------------------------------------------------------------------------+
-                                          |
-                                          v
-+-----------------------------------------------------------------------------------+
-|                                  USER INTERFACE                                   |
-|  Streamlit Reanalysis Console | Plotly 4D Playback | FastAPI Consumer REST Gateway |
-+-----------------------------------------------------------------------------------+
+```mermaid
+graph TD
+    A[IMD Raw Binary .grd] -->|decode_imd_binary.py| B(CF-NetCDF4 .nc Archive)
+    C[MOSDAC Geostationary H5] -->|download_and_decode.py| B
+    B -->|mask_region_boundary_local| D[State Boundary Slices]
+    D -->|ConvLSTM Anomaly Layer| E[Predictive Ensemble Blend]
+    D -->|NOAA Spatial Analogs| E
+    E -->|Mean Bias Correction| F[Final 2D Forecast Grid]
 ```
+
+## Directory Structure and Repository Layout
+
+```text
+.
+├── .streamlit/
+│   └── config.toml              # Streamlit server static configuration parameters
+├── app/
+│   └── streamlit_app.py         # Main dashboard interface
+├── checkpoints/
+│   ├── climate_twin_convlstm_final.pth # PyTorch rainfall ConvLSTM model
+│   └── climate_twin_convlstm_temp.pth  # PyTorch temperature ConvLSTM model
+├── data/
+│   ├── india_states.geojson     # Administrative boundary vector geometries
+│   └── processed/               # CF-compliant NetCDF4 datasets (.nc)
+├── scripts/
+│   ├── decode_imd_binary.py     # Rainfall binary daily decoder
+│   ├── decode_imd_temp.py       # Temperature binary daily decoder
+│   ├── download_and_decode_all_real.py  # Ingestion orchestration runner
+│   └── train_convlstm.py        # PyTorch ConvLSTM training loop
+└── src/
+    ├── api/
+    │   └── main.py              # FastAPI consumer microservice gateway
+    ├── models/
+    │   └── pytorch_convlstm.py  # ConvLSTM layers and dimensions
+    ├── spatial_predictions.py   # Spatiotemporal 5-layer forecasting engine
+    ├── climate_indices.py       # Indices engine (Monsoon, SPI, CWSI, FFG)
+    ├── teleconnections.py       # Index fetchers (ENSO, IOD, MJO)
+    └── basin_analysis.py        # River basin spatial accumulation engine
+```
+
 
 ---
 
 ## Data Engineering and Processing Pipeline
 
+![Satellite Telemetry Ingestion and Regrid Alignment](assets/satellite_telemetry.png)
+
 The ingestion layer translates raw, heterogeneous data formats into structured, multi-dimensional grids:
+
+| Dataset File | Variable Name | Grid Resolution | Spatial Extent |
+| :--- | :--- | :--- | :--- |
+| `IMD_Gridded_Rainfall_0.25_Real_v4.nc` | `rainfall` | 0.25° × 0.25° | Lat 6.5°N–38.5°N \| Lon 66.5°E–100.0°E |
+| `IMD_Gridded_MaxTemp_1.0_Real_v3.nc` | `max_temp` | 1.0° × 1.0° | Lat 7.5°N–37.5°N \| Lon 67.5°E–97.5°E |
+| `IMD_Gridded_MinTemp_1.0_Real_v3.nc` | `min_temp` | 1.0° × 1.0° | Lat 7.5°N–37.5°N \| Lon 67.5°E–97.5°E |
+| `MOSDAC_INSAT_LST_Real.nc` | `lst` | 0.1° × 0.1° | Bounded satellite swath |
+| `MOSDAC_INSAT_Rainfall_Real.nc` | `rain` | 0.1° × 0.1° | Bounded satellite swath |
+
 
 ### 1. Daily Binary Decoding
 * **Precipitation:** Reads IMD 0.25° gridded daily binary files (`.grd`). It reads a single-precision float array of size 129x135, georeferences it to the Indian subcontinent bounding box (Lat 6.5°N - 38.5°N | Lon 66.5°E - 100.0°E), and masks missing data flags (`99.9` or `-99.9` to `NaN`).
@@ -68,6 +109,8 @@ The ingestion pipeline automates daily file acquisition and regridding via Sched
 ---
 
 ## Hybrid 5-Layer Forecast Engine
+
+![5-Layer Forecast Blending Pipeline Diagram](assets/blending_pipeline.png)
 
 The spatial forecast engine (`src/spatial_predictions.py`) avoids compounding autoregressive drift through a hybrid 5-layer pipeline:
 
@@ -115,6 +158,8 @@ $$\text{CorrectedGrid} = \text{BlendedGrid} \cdot \left( \frac{\text{Mean}(\text
 
 ## Meteorological and Hydrological Indices
 
+![Meteorological and Hydrological Indices Engines](assets/indices_calculation.png)
+
 The engine (`src/climate_indices.py`) evaluates real-time data to derive high-level decision support indexes:
 
 ### 1. WMO Standardized Precipitation Index (SPI-30 & SPI-90)
@@ -156,6 +201,12 @@ Monitors predicted grids against official India Meteorological Department thresh
   * **Orange Warning (Very Heavy):** Precipitation rate between $115.6\text{ mm}$ and $204.4\text{ mm}$ per day.
   * **Red Warning (Extremely Heavy):** Precipitation rate exceeding $204.5\text{ mm}$ per day.
 
+### 6. Conversational RAG Copilot and Agricultural Contingency Mapping
+The conversational agricultural copilot (`src/climate_copilot.py`) functions as an interactive decision support system:
+* **Knowledge Retrieval:** Loads local Vector Databases containing pre-indexed regional crop contingency guidelines (compiled from ICAR-CRIDA district databases).
+* **Context Grounding:** The query pipeline intersects user input with the current localized meteorological status (mean rainfall grid anomalies, SPI drought indexes, and CWSI crop stress). 
+* **Synthesis:** Feeds the grounded context vector into a Large Language Model prompt template, constraining responses to official district-level guidelines (e.g., prescribing specific drought-resistant crop choices like Pearl Millet or Sorghum during prolonged precipitation deficits).
+
 ---
 
 ## WMS Layer Integration Protocols
@@ -165,6 +216,12 @@ The GIS layer integrates real-time satellite data using the Web Map Service (WMS
 * **Execution:** Resolves map layer views dynamically inside Plotly `Scattermap` maps. The client browser issues a standard `GetMap` query to fetch raster tiles projected under EPSG:3857 coordinate systems:
   `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&BBOX={bbox-epsg-3857}&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&LAYERS=LPRM_AMSR2_Surface_Soil_Moisture_C1_Band_Day_Daily&STYLES=&FORMAT=image/png&TRANSPARENT=true`
 * The Soil Moisture layer is automatically requested without rigid static date parameters, allowing the WMS server to default to the latest available daily satellite composite.
+
+## Interactive GIS Console and Copilot
+
+![Digital Twin GIS Dashboard and Conversational RAG Copilot](assets/gis_dashboard.png)
+
+![What-If Scenario Simulation Feedback Loop](assets/whatif_scenario_matrix.png)
 
 ---
 
@@ -231,6 +288,11 @@ Run the FastAPI service to serve predictions and geodata to external GIS clients
 uvicorn src.api.main:app --reload --port 8000
 ```
 * **Endpoint example:** GET `http://localhost:8000/api/status` returns daily data status.
+
+### 4. Live-Reload and Model Cache-Busting
+To ensure that backend predictive edits take effect immediately inside the active Streamlit runtime process:
+* **Active Module Reloading:** The main application imports `importlib` and calls `importlib.reload(spatial_predictions)` at the start of execution, bypassing Python's default cached imports.
+* **Hash-Based Cache Invalidation:** The model singleton loader (`src/model_loader.py`) is annotated with `@st.cache_resource(hash_funcs={...})`, mapping the model state to a cryptographic file-hash of the neural layer definitions to force cache invalidation only when structural updates occur.
 
 ---
 
