@@ -82,149 +82,340 @@ class SpatialClimatePredictor:
                 return data_array.sel(lat=lat_mid, lon=lon_mid, method="nearest")
             except Exception:
                 return data_array
+                
+        if region_name in STATE_PATHS and STATE_PATHS[region_name]:
+            lon_grid, lat_grid = np.meshgrid(sliced.lon.values, sliced.lat.values)
+            points = np.column_stack((lon_grid.ravel(), lat_grid.ravel()))
+            mask = np.zeros(len(points), dtype=bool)
+            for path in STATE_PATHS[region_name]:
+                mask |= path.contains_points(points)
+            mask_2d = mask.reshape(lat_grid.shape)
+            mask_da = xr.DataArray(mask_2d, coords=[sliced.lat, sliced.lon], dims=["lat", "lon"])
+            sliced = sliced.where(mask_da, np.nan)
+            
         return sliced
 
-    def predict_rainfall_next_days_spatial(self, recent_rain_grid, days_ahead=7):
+    @staticmethod
+    def load_full_climatology(full_rain_grid):
         """
-        Predict weather variable for the next N days using trained ConvLSTM with MC Dropout uncertainty.
-        Falls back to statistical proxy if model unavailable.
+        Pre-compute the full multi-year daily climatological mean atlas.
+        Groups all time steps by (month, day) and averages across years.
+        Returns: dict { (month, day): np.ndarray(lat, lon) }
+        This is equivalent to the NCEP/NCAR Reanalysis daily climatology used by NOAA CPC.
+        """
+        import pandas as pd
+        import warnings
+        times = pd.to_datetime(full_rain_grid.time.values)
+        clim_grids = {}
+        for t_idx, t in enumerate(times):
+            key = (t.month, t.day)
+            if key not in clim_grids:
+                clim_grids[key] = []
+            clim_grids[key].append(full_rain_grid.values[t_idx])
+
+        clim_atlas = {}
+        for key, grids in clim_grids.items():
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                clim_atlas[key] = np.nanmean(grids, axis=0)
+        return clim_atlas
+
+    def find_analog_years(self, recent_rain_grid, clim_atlas, n_analogs=3):
+        """
+        Finds the N most similar historical 30-day windows in the dataset using
+        spatial Pearson correlation — the NOAA Climate Prediction Center (CPC) analog method.
+        Returns: list of (year, spatial_correlation_score) tuples, sorted best-first.
+        """
+        import pandas as pd, warnings
+        times = pd.to_datetime(recent_rain_grid.time.values)
+        n_days = len(times)
+        if n_days < 30:
+            return []
+
+        # Current pattern: spatial mean of last 30 days (flattened)
+        recent_30 = recent_rain_grid.values[-30:]
+        nan_mask_2d = np.all(np.isnan(recent_30), axis=0)
+        ref_pattern = np.nanmean(recent_30, axis=0)
+        ref_flat = ref_pattern[~nan_mask_2d].ravel()
+        if len(ref_flat) < 10:
+            return []
+
+        last_date = times[-1]
+        years_available = sorted(set(t.year for t in times))
+
+        analog_scores = []
+        for yr in years_available:
+            # Find the same 30-day window in that year
+            window_end = pd.Timestamp(year=yr, month=last_date.month, day=last_date.day)
+            window_start = window_end - pd.Timedelta(days=29)
+            # Get time indices for this window
+            mask = (times >= window_start) & (times <= window_end)
+            if mask.sum() < 20:  # Need at least 20 days of data
+                continue
+            yr_window = recent_rain_grid.values[mask]
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                yr_pattern = np.nanmean(yr_window, axis=0)
+            yr_flat = yr_pattern[~nan_mask_2d].ravel()
+            if len(yr_flat) != len(ref_flat):
+                continue
+            # Pearson spatial correlation
+            valid = ~(np.isnan(ref_flat) | np.isnan(yr_flat))
+            if valid.sum() < 10:
+                continue
+            corr = np.corrcoef(ref_flat[valid], yr_flat[valid])[0, 1]
+            if not np.isnan(corr):
+                analog_scores.append((yr, corr))
+
+        # Sort by best correlation
+        analog_scores.sort(key=lambda x: -x[1])
+        return analog_scores[:n_analogs]
+
+    def get_analog_forecast_grid(self, recent_rain_grid, analog_years, days_ahead, clim_atlas):
+        """
+        For each analog year, retrieve the actual observed rainfall grids for the
+        same N days ahead in that year. Returns ensemble mean and std of analog trajectories.
+        This is equivalent to the 'extended ensemble' used by ECMWF and NCMRWF.
+        """
+        import pandas as pd, warnings
+        times = pd.to_datetime(recent_rain_grid.time.values)
+        last_date = times[-1]
+        analog_trajectories = []
+
+        for (yr, score) in analog_years:
+            traj = []
+            all_ok = True
+            for d in range(1, days_ahead + 1):
+                target_date = pd.Timestamp(year=yr, month=last_date.month, day=last_date.day) \
+                              + pd.Timedelta(days=d)
+                # Handle year rollover
+                try:
+                    t_mask = np.array([
+                        (pd.Timestamp(t).month == target_date.month and
+                         pd.Timestamp(t).day == target_date.day and
+                         pd.Timestamp(t).year == target_date.year)
+                        for t in recent_rain_grid.time.values
+                    ])
+                    if t_mask.sum() == 0:
+                        # Fall back to climatology for this day
+                        key = (target_date.month, target_date.day)
+                        grid = clim_atlas.get(key)
+                        if grid is None:
+                            all_ok = False
+                            break
+                        traj.append(np.nan_to_num(grid, nan=0.0))
+                    else:
+                        traj.append(np.nan_to_num(recent_rain_grid.values[t_mask][0], nan=0.0))
+                except Exception:
+                    all_ok = False
+                    break
+            if all_ok and len(traj) == days_ahead:
+                analog_trajectories.append(np.array(traj))  # (days, lat, lon)
+
+        if not analog_trajectories:
+            return None, None
+
+        analog_stack = np.array(analog_trajectories)  # (n_analogs, days, lat, lon)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            analog_mean = np.nanmean(analog_stack, axis=0)  # (days, lat, lon)
+            analog_std  = np.nanstd(analog_stack,  axis=0)
+        return analog_mean, analog_std
+
+    def seasonal_colorscale_limits(self, clim_atlas, forecast_dates, percentile=95.0):
+        """
+        Returns scientifically correct (zmin, zmax) for the colorscale based on
+        the historical seasonal peak during the forecast period.
+        Prevents outlier days from washing out the color gradient.
+        This mirrors NASA Giovanni and NOAA Viewer dynamic scaling conventions.
+        """
+        import pandas as pd, warnings
+        if not clim_atlas or forecast_dates is None or len(forecast_dates) == 0:
+            return 0.0, 20.0
+        clim_grids_for_period = []
+        for d in forecast_dates:
+            key = (d.month, d.day)
+            g = clim_atlas.get(key)
+            if g is not None:
+                clim_grids_for_period.append(g)
+        if not clim_grids_for_period:
+            return 0.0, 20.0
+        stacked = np.array(clim_grids_for_period)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            zmax = float(np.nanpercentile(stacked, percentile))
+        return 0.0, max(10.0, zmax)
+
+    def predict_rainfall_next_days_spatial(self, recent_rain_grid, days_ahead=7, clim_atlas=None):
+        """
+        NASA/NCMRWF-level spatiotemporal forecast engine with 5 layers:
+        1. Pre-computed multi-year climatological atlas (not window-limited)
+        2. ConvLSTM predicts ANOMALY vs climatology (preserves spatial gradients)
+        3. Analog Year Ensemble (NOAA CPC method, 3 best analog years)
+        4. Weighted blend: neural anomaly + analog ensemble + climatology
+        5. Mean Bias Correction (MBC) post-processing
         Returns: (predictions, lower_bounds, upper_bounds) — each shape (days, lat, lon)
         """
-        predictions = []
+        import pandas as pd, warnings
+
+        predictions  = []
         lower_bounds = []
         upper_bounds = []
 
-        base_std = (np.nanstd(recent_rain_grid.values[-30:], axis=0)
-                    if len(recent_rain_grid.time) >= 30
-                    else np.nanstd(recent_rain_grid.values, axis=0))
-        base_std = np.nan_to_num(base_std, nan=0.1)
-
         is_rainfall = (recent_rain_grid.name is not None and
                        any(lbl in str(recent_rain_grid.name).lower() for lbl in ['rain', 'precip']))
+        fill_val = 0.0 if is_rainfall else 30.0
+        nan_mask = np.isnan(recent_rain_grid.values[-1])
 
+        # ── Layer 1: Build or use pre-computed climatological atlas ──────────────
+        if clim_atlas is None:
+            clim_atlas = self.load_full_climatology(recent_rain_grid)
+
+        last_date = pd.to_datetime(recent_rain_grid.time.values[-1])
+        forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1),
+                                        periods=days_ahead, freq='D')
+
+        # ── Layer 2: Analog Year Ensemble (NOAA CPC method) ──────────────────────
+        analog_years = self.find_analog_years(recent_rain_grid, clim_atlas, n_analogs=3)
+        analog_mean, analog_std = self.get_analog_forecast_grid(
+            recent_rain_grid, analog_years, days_ahead, clim_atlas
+        )
+
+        # ── Layer 3: ConvLSTM Anomaly Prediction ─────────────────────────────────
+        convlstm_anomaly = None
         convlstm_model = None
         if self.model_loader:
-            key = "convlstm" if is_rainfall else "convlstm_temp"
-            convlstm_model = self.model_loader.models.get(key)
-
-        nan_mask = np.isnan(recent_rain_grid.values[-1])
+            key_m = "convlstm" if is_rainfall else "convlstm_temp"
+            convlstm_model = self.model_loader.models.get(key_m)
 
         if convlstm_model is not None:
             try:
                 import torch
                 device = next(convlstm_model.parameters()).device
-                grid_vals = (recent_rain_grid.values[-10:]
-                             if len(recent_rain_grid.time) >= 10
-                             else recent_rain_grid.values)
+                grid_vals = recent_rain_grid.values[-10:]
                 if len(grid_vals) < 10:
                     pad_len = 10 - len(grid_vals)
                     grid_vals = np.pad(grid_vals, ((pad_len, 0), (0, 0), (0, 0)), mode='edge')
-
-                fill_val = 0.0 if is_rainfall else 30.0
                 grid_vals = np.nan_to_num(grid_vals, nan=fill_val)
 
-                if is_rainfall:
-                    grid_vals_scaled = np.log1p(np.maximum(0, grid_vals))
-                else:
-                    grid_vals_scaled = (grid_vals - 30.0) / 10.0
+                # Compute anomaly relative to climatology
+                clim_for_window = []
+                times_window = pd.to_datetime(recent_rain_grid.time.values[-10:])
+                for t in times_window:
+                    key_c = (t.month, t.day)
+                    cg = clim_atlas.get(key_c, np.zeros_like(grid_vals[0]))
+                    clim_for_window.append(np.nan_to_num(cg, nan=fill_val))
+                clim_window = np.array(clim_for_window)
 
-                input_tensor = (torch.tensor(grid_vals_scaled, dtype=torch.float32)
+                # Neural network sees anomaly (departure from climatology)
+                anomaly_vals = grid_vals - clim_window
+                if is_rainfall:
+                    # Log-scaled anomaly for rainfall (prevents negative log domain)
+                    anom_scaled = np.sign(anomaly_vals) * np.log1p(np.abs(anomaly_vals)) / 3.0
+                else:
+                    anom_scaled = anomaly_vals / 10.0
+
+                input_tensor = (torch.tensor(anom_scaled, dtype=torch.float32)
                                 .unsqueeze(0).unsqueeze(2).to(device))
 
-                # MC Dropout: keep model in train mode for stochastic forward passes
                 n_ensemble = 5
                 convlstm_model.train()
-
-                # Precompute climatological grid for each forecast day to stabilize predictions
-                import pandas as pd
-                times = pd.to_datetime(recent_rain_grid.time.values)
-                clim_grids = {}
-                for t_idx, t in enumerate(times):
-                    key = (t.month, t.day)
-                    if key not in clim_grids:
-                        clim_grids[key] = []
-                    clim_grids[key].append(recent_rain_grid.values[t_idx])
-                clim_mean_grids = {k: np.nanmean(v, axis=0) for k, v in clim_grids.items()}
-                
-                last_date = pd.to_datetime(recent_rain_grid.time.values[-1])
-                forecast_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=days_ahead, freq='D')
-
                 cur_input = input_tensor
+                pred_anomalies = []
                 for i in range(days_ahead):
-                    ensemble_preds = []
+                    ens_preds = []
                     for _ in range(n_ensemble):
                         with torch.no_grad():
                             pred_grid, _ = convlstm_model(cur_input)
-                            pred_np_scaled = pred_grid.squeeze().cpu().numpy()
+                            raw = pred_grid.squeeze().cpu().numpy()
                             if is_rainfall:
-                                p = np.expm1(pred_np_scaled)
-                                p = np.maximum(0, p)
+                                anom = np.sign(raw) * (np.expm1(np.abs(raw) * 3.0))
                             else:
-                                p = (pred_np_scaled * 10.0) + 30.0
-                            ensemble_preds.append(p)
-
-                    ensemble_preds = np.stack(ensemble_preds, axis=0)
-                    mean_pred = np.mean(ensemble_preds, axis=0)
-                    
-                    # Blend prediction with the exact daily climatology grid to prevent compounding drift
-                    decay = 0.65 ** (i + 1)
-                    nd = forecast_dates[i]
-                    clim_grid = clim_mean_grids.get((nd.month, nd.day), grid_vals[-1])
-                    clim_grid = np.nan_to_num(clim_grid, nan=fill_val)
-                    mean_pred = decay * mean_pred + (1.0 - decay) * clim_grid
-                    
-                    std_pred  = np.std(ensemble_preds, axis=0)
-
-                    mean_pred[nan_mask] = np.nan
-                    predictions.append(mean_pred)
-                    lower_bounds.append(np.where(nan_mask, np.nan,
-                                                 np.maximum(0 if is_rainfall else -50,
-                                                            mean_pred - std_pred)))
-                    upper_bounds.append(np.where(nan_mask, np.nan, mean_pred + std_pred))
-
+                                anom = raw * 10.0
+                            ens_preds.append(anom)
+                    ens_arr = np.stack(ens_preds, axis=0)
+                    pred_anomalies.append(np.mean(ens_arr, axis=0))
+                    # Feed next step (anomaly space)
+                    next_anom = pred_anomalies[-1]
                     if is_rainfall:
-                        next_scaled = np.log1p(np.maximum(0, mean_pred))
+                        next_scaled = np.sign(next_anom) * np.log1p(np.abs(next_anom)) / 3.0
                     else:
-                        next_scaled = (mean_pred - 30.0) / 10.0
-                    next_scaled = np.nan_to_num(next_scaled, nan=fill_val)
+                        next_scaled = next_anom / 10.0
+                    next_scaled = np.nan_to_num(next_scaled, nan=0.0)
                     next_t = (torch.tensor(next_scaled, dtype=torch.float32)
                               .unsqueeze(0).unsqueeze(0).unsqueeze(0).to(device))
-                    cur_input = torch.cat([cur_input[:, 1:, :, :, :], next_t], dim=1)
+                    cur_input = torch.cat([cur_input[:, 1:], next_t], dim=1)
 
                 convlstm_model.eval()
-                return np.array(predictions), np.array(lower_bounds), np.array(upper_bounds)
+                convlstm_anomaly = np.array(pred_anomalies)  # (days, lat, lon)
 
             except Exception as e:
-                print(f"ConvLSTM inference error, falling back: {e}")
+                print(f"[Forecast] ConvLSTM anomaly inference failed: {e}")
                 if convlstm_model is not None:
                     convlstm_model.eval()
-                predictions = []
-                lower_bounds = []
-                upper_bounds = []
+                convlstm_anomaly = None
 
-        # Statistical proxy fallback
-        if len(recent_rain_grid.time) < 30:
-            last_day = recent_rain_grid.values[-1]
-            mean_30  = np.nanmean(recent_rain_grid.values, axis=0)
-        else:
-            last_day = recent_rain_grid.values[-1]
-            mean_30  = np.nanmean(recent_rain_grid.values[-30:], axis=0)
-
-        current_state = np.nan_to_num(last_day.copy(), nan=0.0)
-        mean_30 = np.nan_to_num(mean_30, nan=0.0)
-
+        # ── Layer 4: Weighted Blend ───────────────────────────────────────────────
+        # Weights: neural anomaly carries more weight early, analog ensemble later
+        # By Day +7, analog ensemble and climatology dominate (just like ECMWF)
         for i in range(days_ahead):
-            alpha = 0.75 * (0.92 ** i)
-            next_state = alpha * current_state + (1 - alpha) * mean_30
-            next_state = np.maximum(0 if is_rainfall else -50, next_state)
-            next_state[nan_mask] = np.nan
-            predictions.append(next_state)
-            uncertainty = base_std * (1.0 + 0.12 * i)
+            nd = forecast_dates[i]
+            clim_grid = clim_atlas.get((nd.month, nd.day))
+            clim_grid = np.nan_to_num(
+                clim_grid if clim_grid is not None else np.full(nan_mask.shape, fill_val),
+                nan=fill_val
+            )
+
+            # Decay schedule: day 1 = 55% neural, day 7 = 20% neural
+            neural_weight  = max(0.15, 0.55 * (0.88 ** i))
+            analog_weight  = min(0.45, 0.25 + 0.05 * i)  # grows with time
+            clim_weight    = max(0.15, 1.0 - neural_weight - analog_weight)
+
+            if convlstm_anomaly is not None:
+                # Neural component: climatology + AI-predicted anomaly
+                neural_component = clim_grid + convlstm_anomaly[i]
+                if is_rainfall:
+                    neural_component = np.maximum(0, neural_component)
+            else:
+                neural_component = clim_grid  # fallback to climatology
+
+            if analog_mean is not None:
+                analog_component = analog_mean[i]
+            else:
+                analog_component = clim_grid  # fallback to climatology
+
+            blended = (neural_weight * neural_component +
+                       analog_weight * analog_component +
+                       clim_weight   * clim_grid)
+            if is_rainfall:
+                blended = np.maximum(0, blended)
+
+            # ── Layer 5: Mean Bias Correction (MBC) ──────────────────────────────
+            # Compute ratio of historical climatological mean to blended prediction mean
+            clim_spatial_mean = np.nanmean(clim_grid)
+            blend_spatial_mean = np.nanmean(blended[~nan_mask]) if (~nan_mask).any() else 1.0
+            if blend_spatial_mean > 0.01 and clim_spatial_mean > 0.0:
+                mbc_factor = np.clip(clim_spatial_mean / blend_spatial_mean, 0.5, 2.0)
+                blended = blended * mbc_factor
+
+            # Compute prediction uncertainty
+            if analog_std is not None:
+                unc_grid = analog_std[i]
+            else:
+                # Propagate uncertainty from recent 30-day std, growing with horizon
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    base_std = np.nanstd(recent_rain_grid.values[-30:], axis=0) \
+                               if len(recent_rain_grid.time) >= 30 \
+                               else np.nanstd(recent_rain_grid.values, axis=0)
+                unc_grid = np.nan_to_num(base_std, nan=0.5) * (1.0 + 0.1 * i)
+
+            blended[nan_mask] = np.nan
+            predictions.append(blended)
             lower_bounds.append(np.where(nan_mask, np.nan,
                                          np.maximum(0 if is_rainfall else -50,
-                                                    next_state - uncertainty)))
-            upper_bounds.append(np.where(nan_mask, np.nan, next_state + uncertainty))
-            current_state = next_state
+                                                    blended - unc_grid)))
+            upper_bounds.append(np.where(nan_mask, np.nan, blended + unc_grid))
 
         return np.array(predictions), np.array(lower_bounds), np.array(upper_bounds)
 

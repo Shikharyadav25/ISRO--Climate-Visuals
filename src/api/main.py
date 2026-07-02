@@ -52,8 +52,8 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'processe
 
 def _load_datasets(region="Karnataka"):
     try:
-        ds_rain = xr.open_dataset(os.path.join(DATA_DIR, 'IMD_Gridded_Rainfall_0.25_Real_v2.nc'), engine='netcdf4')
-        ds_temp = xr.open_dataset(os.path.join(DATA_DIR, 'IMD_Gridded_MaxTemp_1.0_Real.nc'), engine='netcdf4')
+        ds_rain = xr.open_dataset(os.path.join(DATA_DIR, 'IMD_Gridded_Rainfall_0.25_Real_v4.nc'), engine='netcdf4')
+        ds_temp = xr.open_dataset(os.path.join(DATA_DIR, 'IMD_Gridded_MaxTemp_1.0_Real_v3.nc'), engine='netcdf4')
         
         # Slice to region
         ds_rain = predictor.slice_region(ds_rain, region)
@@ -115,9 +115,9 @@ def get_data_status():
     """Returns the current data assimilation status for all real sources."""
     status = {}
     for fname, label in [
-        ("IMD_Gridded_Rainfall_0.25_Real_v2.nc", "IMD_Gridded_Rainfall_0.25"),
-        ("IMD_Gridded_MaxTemp_1.0_Real.nc", "IMD_Gridded_MaxTemp_1.0"),
-        ("IMD_Gridded_MinTemp_1.0_Real.nc", "IMD_Gridded_MinTemp_1.0"),
+        ("IMD_Gridded_Rainfall_0.25_Real_v4.nc", "IMD_Gridded_Rainfall_0.25"),
+        ("IMD_Gridded_MaxTemp_1.0_Real_v3.nc", "IMD_Gridded_MaxTemp_1.0"),
+        ("IMD_Gridded_MinTemp_1.0_Real_v3.nc", "IMD_Gridded_MinTemp_1.0"),
         ("MOSDAC_INSAT_LST_Real.nc", "MOSDAC_INSAT_LST"),
         ("MOSDAC_INSAT_SST_Real.nc", "MOSDAC_INSAT_SST"),
         ("MOSDAC_INSAT_Rainfall_Real.nc", "MOSDAC_INSAT_Rainfall"),
