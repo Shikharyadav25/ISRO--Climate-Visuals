@@ -39,7 +39,7 @@ The system is split into three core layers: a data engineering and decoding pipe
 
 The ingestion layer translates raw, heterogeneous data formats into structured, multi-dimensional grids:
 
-### 1. Daily Binary Decoding (`scripts/decode_imd_binary.py` & `scripts/decode_imd_temp.py`)
+### 1. Daily Binary Decoding
 * **Precipitation:** Reads IMD 0.25° gridded daily binary files (`.grd`). It reads a single-precision float array of size 129x135, georeferences it to the Indian subcontinent bounding box (Lat 6.5°N - 38.5°N | Lon 66.5°E - 100.0°E), and masks missing data flags (`99.9` or `-99.9` to `NaN`).
 * **Temperature:** Reads IMD 1.0° gridded daily maximum and minimum binary files (`.grd`). It reads a single-precision float array of size 31x31, georeferences it to the bounding box (Lat 7.5°N - 37.5°N | Lon 67.5°E - 97.5°E), and masks invalid values (`-999.0` to `NaN`).
 * **Storage Compilation:** Aggregates daily grids along the time axis into CF-compliant NetCDF4 (`.nc`) files.
@@ -58,6 +58,13 @@ The ingestion layer translates raw, heterogeneous data formats into structured, 
   ```
   This prevents grid calculations from leaking into neighboring states or oceans, maintaining regional integrity for localized water and agricultural modeling.
 
+### 4. Data Ingestion Cron Orchestration
+The ingestion pipeline automates daily file acquisition and regridding via Scheduled scripts (`scripts/download_and_decode_all_real.py`). The script:
+1. Performs an HTTP GET query against IMD's daily reanalysis servers to retrieve the latest binary `.grd` records.
+2. Applies a nearest-neighbor regridding interpolation to resolve coordinate spatial grids.
+3. Appends the daily slices to the active, CF-compliant NetCDF4 archive on disk.
+4. Updates NetCDF metadata parameters (time variables, scale factors, and add_offset values) to preserve historical data standards.
+
 ---
 
 ## Hybrid 5-Layer Forecast Engine
@@ -66,6 +73,8 @@ The spatial forecast engine (`src/spatial_predictions.py`) avoids compounding au
 
 ### Layer 1: PyTorch Spatio-Temporal ConvLSTM Anomaly Model
 * **Architecture:** Swaps standard matrix multiplications in LSTM cells with 2D convolutions (kernel size 3x3, padding 1) to capture spatial correlations. Configured with 2 ConvLSTM layers (64 and 32 hidden dimensions).
+* **Tensor Configuration:** Inputs are mapped as 5D tensors of shape:
+  $$\text{Input Shape} = [B, T, C, H, W] = [\text{Batch}, 10 \text{ days}, 1 \text{ channel}, 129 \text{ lat}, 135 \text{ lon}]$$
 * **Anomaly-Space Mapping:** Rather than predicting absolute values (which leads to severe dampening), the network predicts anomalies relative to daily climatological means.
   * **Rainfall Anomaly Scaling:** Log-transformed to handle extreme events:
     $$y = \text{sign}(x) \cdot \frac{\log(1 + |x|)}{3.0}$$
@@ -99,21 +108,37 @@ The engine (`src/climate_indices.py`) evaluates real-time data to derive high-le
 
 ### 1. WMO Standardized Precipitation Index (SPI-30 & SPI-90)
 * Measures meteorological drought and moisture surplus on 30-day and 90-day scales.
-* Fits a two-parameter Gamma distribution to historical cumulative rainfall and transforms the cumulative probability to a standard normal distribution (mean 0, variance 1).
+* Fits a two-parameter Gamma probability density function to the historical cumulative rainfall:
+  $$g(x) = \frac{1}{\beta^\alpha \Gamma(\alpha)} x^{\alpha - 1} e^{-x/\beta}$$
+  where $\alpha$ is the shape parameter, $\beta$ is the scale parameter, and $\Gamma(\alpha)$ is the gamma function.
+* Transforms the cumulative probability $G(x)$ to a standard normal distribution (mean 0, variance 1):
+  $$\text{SPI} = \Psi^{-1}(G(x))$$
 * **Drought Categories:** Values $\le -1.0$ indicate moderate drought, $\le -1.5$ severe, and $\le -2.0$ extreme drought.
 
 ### 2. FAO-56 Crop Water Stress Index (CWSI)
 * Estimates agricultural water stress by tracking actual vs. potential evapotranspiration ($ET$):
   $$\text{CWSI} = 1.0 - \frac{ET_{\text{actual}}}{ET_{\text{potential}}}$$
+  where $ET_{\text{potential}}$ is derived using the Penman-Monteith equation for reference crop evapotranspiration ($ET_0$).
 * Indicates crop stress on a scale from 0.0 (no stress) to 1.0 (water-deficit stress).
 
 ### 3. NWS Flash Flood Guidance (FFG)
 * Estimates the volume of rainfall (mm/day) required to initiate local flooding.
-* Intersects incoming grid accumulations with soil moisture saturation percentages to calculate soil capacity limits.
+* Calculates soil capacity limits by evaluating observed precipitation accumulations relative to the active soil moisture saturation percentage ($SM_{\%}$):
+  $$\text{FFG} = \text{Capacity}_{\text{max}} \cdot (1.0 - SM_{\%})$$
 
 ### 4. Monsoon Onset and Northward Advance Tracker
 * Evaluates waypoints using the IMD criteria: at least 5 consecutive days where the spatial mean daily rainfall over the waypoint exceeds $2.5\text{ mm/day}$, commencing after the earliest historical onset window.
 * **Target Year Slicing:** Dynamically filters dataset records to the chosen target year. If the selection exceeds the dataset range (e.g. 2026), it falls back to the latest year of available observations (`2023`), updating all cards and headers dynamically.
+
+---
+
+## WMS Layer Integration Protocols
+
+The GIS layer integrates real-time satellite data using the Web Map Service (WMS) protocol:
+* **Endpoints:** Communicates with NASA GIBS (Global Imagery Browse Services) and JAXA servers.
+* **Execution:** Resolves map layer views dynamically inside Plotly `Scattermap` maps. The client browser issues a standard `GetMap` query to fetch raster tiles projected under EPSG:3857 coordinate systems:
+  `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&BBOX={bbox-epsg-3857}&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&LAYERS=LPRM_AMSR2_Surface_Soil_Moisture_C1_Band_Day_Daily&STYLES=&FORMAT=image/png&TRANSPARENT=true`
+* The Soil Moisture layer is automatically requested without rigid static date parameters, allowing the WMS server to default to the latest available daily satellite composite.
 
 ---
 
@@ -128,7 +153,7 @@ Evaluates the accuracy of probabilistic heavy rainfall forecasts ($>35\text{ mm/
   where $p_n$ is the forecasted probability and $o_n$ is the binary observation (1 if $>35\text{ mm}$, else 0).
 * **Brier Skill Score (BSS):** Measures the relative improvement over climatological forecasts:
   $$\text{BSS} = 1.0 - \frac{\text{BS}_{\text{forecast}}}{\text{BS}_{\text{climatology}}}$$
-  A BSS $> 0$ indicates the model out-performs climatological probability.
+  where the climatology score $\text{BS}_{\text{climatology}}$ is calculated by setting $p_n$ to the long-term historical probability of exceedance. A BSS $> 0$ indicates the model out-performs climatological probability.
 
 ### 2. Reliability Calibration Curves
 Plots forecasted probabilities against observed frequencies across 10 bins. A perfectly calibrated model aligns along the $y=x$ diagonal line, revealing prediction biases (e.g., over-forecasting or under-forecasting).
